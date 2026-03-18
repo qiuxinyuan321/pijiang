@@ -1,0 +1,8 @@
+include README.md
+include pyproject.toml
+recursive-include pijiang *.py
+prune tests
+prune tools
+prune build
+prune dist
+prune pijiang.egg-info
