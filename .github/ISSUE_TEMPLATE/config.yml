@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 皮匠路线图
+    url: https://github.com/qiuxinyuan321/pijiang/blob/main/docs/ROADMAP.md
+    about: 先看当前主线和阶段目标，避免提案和既有路线重复。
+  - name: 皮匠图解
+    url: https://github.com/qiuxinyuan321/pijiang/blob/main/docs/demo-visuals.md
+    about: 如果你还不确定项目定位，先看图解文档。

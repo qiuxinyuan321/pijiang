@@ -23,6 +23,7 @@
 - 新用户先走 `cpj init -> cpj doctor -> cpj demo -> cpj run`
 
 更细的图解说明见 [docs/demo-visuals.md](docs/demo-visuals.md)。
+如果你准备参与贡献，先看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 10 席议会拓扑
 
@@ -354,6 +355,7 @@ obsidian-vault/
 短期路线已经整理成单独文档：[docs/ROADMAP.md](docs/ROADMAP.md)
 
 如果你想先从“看图理解皮匠”开始，看这里：[docs/demo-visuals.md](docs/demo-visuals.md)
+如果你想直接参与仓库贡献，看这里：[CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 仓库结构
 

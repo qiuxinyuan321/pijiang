@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
+UNC_PATH_RE = re.compile(r"^(\\\\|//)")
 
 
 def _first_env(*names: str) -> str:
@@ -13,6 +16,17 @@ def _first_env(*names: str) -> str:
         if value:
             return value
     return ""
+
+
+def _looks_like_windows_absolute_path(value: str) -> bool:
+    return bool(WINDOWS_DRIVE_PATH_RE.match(value) or UNC_PATH_RE.match(value))
+
+
+def _override_path(value: str) -> Path:
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute() or _looks_like_windows_absolute_path(value):
+        return candidate
+    return candidate.resolve()
 
 
 def get_workspace_root(repo_root: Path = REPO_ROOT) -> Path:
@@ -31,7 +45,7 @@ def get_workspace_drive_root(repo_root: Path = REPO_ROOT) -> Path:
 def get_cold_storage_workspace_root(repo_root: Path = REPO_ROOT) -> Path:
     override = _first_env("PIJIANG_COLD_STORAGE_ROOT", "CODEX_COLD_STORAGE_ROOT")
     if override:
-        return Path(override).expanduser().resolve()
+        return _override_path(override)
     workspace_name = get_workspace_name(repo_root)
     return get_workspace_drive_root(repo_root) / f"{workspace_name} huancun" / "workspace-cache" / workspace_name
 
@@ -39,14 +53,14 @@ def get_cold_storage_workspace_root(repo_root: Path = REPO_ROOT) -> Path:
 def get_cache_root(repo_root: Path = REPO_ROOT) -> Path:
     override = _first_env("PIJIANG_CACHE_ROOT", "CODEX_CACHE_ROOT")
     if override:
-        return Path(override).expanduser().resolve()
+        return _override_path(override)
     return get_cold_storage_workspace_root(repo_root) / "cache"
 
 
 def get_models_root(repo_root: Path = REPO_ROOT) -> Path:
     override = _first_env("PIJIANG_MODELS_ROOT", "CODEX_MODELS_ROOT")
     if override:
-        return Path(override).expanduser().resolve()
+        return _override_path(override)
     return get_cold_storage_workspace_root(repo_root) / "models"
 
 
