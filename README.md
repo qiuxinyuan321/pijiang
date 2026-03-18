@@ -4,32 +4,56 @@
 
 `皮匠` 是一个面向复杂议题的多模型议会能力层。
 
-它的定位不是“让一个模型扮演多个角色”，而是把多个真实模型位组织成一套可执行的议会工作流，让不同模型分别承担不同分析职责，然后完成：
+它不是让一个模型扮演多个角色，而是把多个真实模型位组织成一套可执行的议会工作流，让不同模型分别承担不同分析职责，然后完成：
 
 `发散 -> 对抗 -> 整合 -> 收敛`
 
 对外安装包名是 `pijiang`，主命令是 `cpj`。
 
-## 它解决什么问题
+## 一句话理解
 
-普通单模型问答很适合快速响应，但一旦议题变复杂，往往会出现几个问题：
+如果你想要的不是“一个模型快速答一句”，而是一条更像真实团队讨论后产出的结构化方案链，`皮匠` 就是把这套能力做成了可嵌入现有入口的能力层。
 
-- 视角单一，容易掉进局部最优
-- 没有外部搜索、强规划、红队质疑的显式分工
-- 输出像答案，不像真正可执行的方案链
-- 长流程等待时是黑盒，用户看不到系统到底在做什么
+- 不是单模型多角色扮演
+- 是多模型、多职责的思路整合
+- 默认采用 `10` 席完整议会
+- 新用户先走 `cpj init -> cpj doctor -> cpj demo -> cpj run`
 
-`皮匠` 的思路是把“多模型协作”做成一个可以嵌入现有入口的能力层，而不是强迫你换掉原来的工具。
+更细的图解说明见 [docs/demo-visuals.md](docs/demo-visuals.md)。
 
-## 核心原则
+## 10 席议会拓扑
 
-- 不是单模型多角色扮演，而是多个真实模型位承担不同分析职责
-- `controller` 独立于 `planning`，强模型主控不等于 coding plan
-- 默认是 `10` 席完整议会，而不是模糊的若干 agent
-- 新用户先看 `demo`，先看到价值，再配真实 API
-- `Obsidian` 是强推荐默认体验，用来承载结构化产物、进度和 run 历史
+下面这张图不是人格关系图，而是职责拓扑图。
 
-## 10 席标准议会
+```mermaid
+flowchart LR
+    U["议题 / Brief"] --> C["controller<br/>主控"]
+    C --> P["planning<br/>规划者"]
+    C --> S1["search-1<br/>外部搜索者"]
+    C --> S2["search-2<br/>外部搜索者"]
+    C --> M1["marshal-1<br/>裨将"]
+    C --> M2["marshal-2<br/>裨将"]
+    C --> M3["marshal-3<br/>裨将"]
+    C --> H["chaos<br/>混沌者"]
+    C --> K["skeptic<br/>质疑者"]
+    P --> F["fusion<br/>融合者"]
+    S1 --> F
+    S2 --> F
+    M1 --> F
+    M2 --> F
+    M3 --> F
+    H --> F
+    K --> F
+    F --> O["终版方案 / 决策账本"]
+```
+
+这张图要表达的核心是：
+
+- `controller` 独立于 `planning`
+- `search / marshal / chaos / skeptic / fusion` 都是分析职责
+- 这里不是一个模型在演 10 个人，而是多个真实模型位在做思路整合
+
+作为补充说明，标准 10 席分别是：
 
 | 席位 | 职责 |
 | --- | --- |
@@ -44,19 +68,58 @@
 | `skeptic` | 质疑者，负责红队拆解与失败模式 |
 | `fusion` | 融合者，负责最终合并、决策账本与终版输出 |
 
-## 工作流一眼看懂
+## 新用户最短路径
+
+不要一上来就直接 `cpj run`。
 
 ```mermaid
 flowchart LR
     A["cpj init"] --> B["cpj doctor"]
-    B --> C["cpj demo"]
+    B -->|"通过 readiness 检查"| C["cpj demo"]
     C --> D["看到 10 席拓扑与完整产物链"]
     D --> E["配置真实 providers"]
     E --> F["cpj run"]
-    F --> G["variants"]
-    G --> H["fusion"]
-    H --> I["Obsidian / CLI 输出"]
 ```
+
+这条路径的目的很明确：
+
+- `init`：先拿到标准配置和 Obsidian 模板
+- `doctor`：先体检，而不是带着半残配置硬跑
+- `demo`：先验证系统价值，不依赖真实 API
+- `run`：只有在 provider 准备好后才进入真实运行
+
+## demo 产物链
+
+`cpj demo` 不是玩具模式，它的作用是让用户先看到皮匠真正的产物结构。
+
+```mermaid
+flowchart LR
+    B["brief"] --> V["10 路 variants"]
+    V --> I["idea-map"]
+    I --> D1["debate-round-1"]
+    D1 --> D2["debate-round-2"]
+    D2 --> FD["fusion-decisions"]
+    FD --> FS["final-solution-draft"]
+    FS --> OUT["Obsidian / CLI 输出"]
+```
+
+这也是皮匠和“只吐一段答案”的普通问答差别最大的地方：
+
+- 有变体层
+- 有对抗层
+- 有融合层
+- 有可回看的结构化产物链
+
+## 它解决什么问题
+
+普通单模型问答很适合快速响应，但一旦议题变复杂，往往会出现几个问题：
+
+- 视角单一，容易掉进局部最优
+- 没有外部搜索、强规划、红队质疑的显式分工
+- 输出像答案，不像真正可执行的方案链
+- 长流程等待时是黑盒，用户看不到系统到底在做什么
+
+`皮匠` 的思路是把“多模型协作”做成一个可以嵌入现有入口的能力层，而不是强迫你换掉原来的工具。
 
 ## 安装
 
@@ -95,20 +158,6 @@ python -m pip install dist\pijiang-0.1.0-py3-none-any.whl
 ```powershell
 pipx install pijiang
 ```
-
-## 新用户推荐路径
-
-不要一上来就直接 `cpj run`。
-
-推荐顺序固定为：
-
-1. `cpj init`
-2. `cpj doctor`
-3. `cpj demo`
-4. 配置真实 providers
-5. `cpj run`
-
-这条路径的意义很简单：先验证安装、模板、可视化和命令面没问题，再接真实 API。
 
 ## 3 分钟上手
 
@@ -214,7 +263,10 @@ obsidian-vault/
             └─ 99-index.md
 ```
 
-它的价值不是“把 Markdown 写进 Vault”这么简单，而是把运行过程变成可浏览、可复盘、可对照的结构化产物链。
+这里和 Mermaid 图的关系是：
+
+- Mermaid 负责讲清楚流程与职责关系
+- 目录树负责说明最终落地产物长什么样
 
 ## 第三方中转站与自定义端口
 
@@ -298,24 +350,7 @@ obsidian-vault/
 
 短期路线已经整理成单独文档：[docs/ROADMAP.md](docs/ROADMAP.md)
 
-当前主线分三段：
-
-### Phase A
-
-- 稳定 `cpj init -> doctor -> demo -> run`
-- 巩固多 provider endpoint 兼容
-- 收敛开源 README、安装链路和基础 CI
-
-### Phase B
-
-- 做更强的宿主集成产物
-- 强化 Obsidian 面板与 run history
-- 增加更多真实 provider 冒烟验证
-
-### Phase C
-
-- 把议会从“命令行能力层”继续推向项目级工作流系统
-- 强化模板、决策账本、长期演化能力
+如果你想先从“看图理解皮匠”开始，看这里：[docs/demo-visuals.md](docs/demo-visuals.md)
 
 ## 仓库结构
 
