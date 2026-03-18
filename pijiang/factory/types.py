@@ -174,3 +174,130 @@ class ReadinessReport:
     warnings: list[ReadinessIssue] = field(default_factory=list)
     ready_items: list[str] = field(default_factory=list)
     endpoint_diagnostics: list[EndpointDiagnostic] = field(default_factory=list)
+
+
+@dataclass
+class EvidenceRef:
+    ref_id: str
+    source: str
+    locator: str = ""
+    snippet: str = ""
+
+
+@dataclass
+class SearchArtifact:
+    lane_id: str
+    query_intent: str
+    source_type: str
+    results: list[dict[str, str]] = field(default_factory=list)
+    evidence_refs: list[EvidenceRef] = field(default_factory=list)
+    key_findings: list[str] = field(default_factory=list)
+    gaps: list[str] = field(default_factory=list)
+    confidence: str = "medium"
+    degraded: bool = False
+
+
+@dataclass
+class SeatResult:
+    seat_id: str
+    seat_type: str
+    summary: str
+    claims: list[dict[str, Any]] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
+    risks: list[str] = field(default_factory=list)
+    open_questions: list[str] = field(default_factory=list)
+    evidence_refs: list[EvidenceRef] = field(default_factory=list)
+    confidence: str = "medium"
+    quality_flags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class QualityAssessment:
+    seat_id: str
+    schema_valid: bool
+    anchor_hits: int
+    evidence_count: int
+    section_completeness: float
+    quality_score: int
+    quality_flags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ExecutionPolicy:
+    max_attempts_per_seat: int = 2
+    retry_backoff_seconds: list[int] = field(default_factory=lambda: [2, 6])
+    soft_budget: int = 6
+    hard_budget: int = 10
+    circuit_breaker_threshold: int = 2
+    quality_retry_threshold: int = 12
+
+
+@dataclass
+class BenchmarkScenario:
+    scenario_id: str
+    title: str
+    brief_path: str
+    description: str = ""
+
+
+@dataclass
+class BenchmarkMeasurement:
+    mode: str
+    run_id: str
+    latency_ms: int
+    provider_calls: int
+    estimated_cost: float
+    schema_pass_rate: float
+    evidence_coverage: float
+    quality_score: float
+    issue_readiness_score: float
+    failed_rate: float
+    fake_success_rate: float
+    degraded_flags: list[str] = field(default_factory=list)
+    truth_audit_path: str = ""
+
+
+@dataclass
+class BenchmarkReport:
+    scenario_id: str
+    generated_at: str
+    measurements: list[BenchmarkMeasurement] = field(default_factory=list)
+
+
+@dataclass
+class RunTruthAudit:
+    run_id: str
+    mode: str
+    seat_integrity_score: int
+    discussion_diversity_score: int
+    evidence_integrity_score: int
+    fusion_integrity_score: int
+    artifact_integrity_score: int
+    fake_success_flags: list[str] = field(default_factory=list)
+    degraded_chain_ids: list[str] = field(default_factory=list)
+    regression_case_paths: list[str] = field(default_factory=list)
+    repair_candidates: list[str] = field(default_factory=list)
+
+
+@dataclass
+class RegressionCase:
+    case_id: str
+    source_run_id: str
+    source_system: str
+    failure_type: str
+    input_brief: str
+    offending_outputs: list[str] = field(default_factory=list)
+    expected_behavior: str = ""
+    repair_hypothesis: str = ""
+    verification_command: str = ""
+
+
+@dataclass
+class IterationDeltaReport:
+    current_run_id: str
+    baseline_run_id: str = ""
+    generated_at: str = ""
+    improvements: list[str] = field(default_factory=list)
+    regressions: list[str] = field(default_factory=list)
+    remaining_gaps: list[str] = field(default_factory=list)
+    next_focus: list[str] = field(default_factory=list)
