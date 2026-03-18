@@ -2,17 +2,65 @@
 
 > 三个臭裨将，顶个诸葛亮。
 
-皮匠是一个面向复杂议题的多模型议会能力层。
+`皮匠` 是一个面向复杂议题的多模型议会能力层。
 
-它不是让一个模型“扮演多个角色”，而是引入多个真实模型位，分别承担主控、规划、外部搜索、裨将、混沌、质疑、融合等分析职责，最后做：
+它的定位不是“让一个模型扮演多个角色”，而是把多个真实模型位组织成一套可执行的议会工作流，让不同模型分别承担不同分析职责，然后完成：
 
 `发散 -> 对抗 -> 整合 -> 收敛`
 
-对外主命令固定为 `cpj`，安装包名保持 `pijiang`。
+对外安装包名是 `pijiang`，主命令是 `cpj`。
 
-## 当前安装方式
+## 它解决什么问题
 
-当前仓库还处于本地打磨阶段，请区分三种安装方式：
+普通单模型问答很适合快速响应，但一旦议题变复杂，往往会出现几个问题：
+
+- 视角单一，容易掉进局部最优
+- 没有外部搜索、强规划、红队质疑的显式分工
+- 输出像答案，不像真正可执行的方案链
+- 长流程等待时是黑盒，用户看不到系统到底在做什么
+
+`皮匠` 的思路是把“多模型协作”做成一个可以嵌入现有入口的能力层，而不是强迫你换掉原来的工具。
+
+## 核心原则
+
+- 不是单模型多角色扮演，而是多个真实模型位承担不同分析职责
+- `controller` 独立于 `planning`，强模型主控不等于 coding plan
+- 默认是 `10` 席完整议会，而不是模糊的若干 agent
+- 新用户先看 `demo`，先看到价值，再配真实 API
+- `Obsidian` 是强推荐默认体验，用来承载结构化产物、进度和 run 历史
+
+## 10 席标准议会
+
+| 席位 | 职责 |
+| --- | --- |
+| `controller` | 主控，负责总体调度与最终收敛 |
+| `planning` | 规划者，优先由 coding plan provider 承担 |
+| `search-1` | 外部搜索者，偏产品/网页/资料检索 |
+| `search-2` | 外部搜索者，偏 GitHub/案例/实现检索 |
+| `marshal-1` | 裨将，偏工程可执行性与落地路径 |
+| `marshal-2` | 裨将，偏结构整理、约束归纳与方案压缩 |
+| `marshal-3` | 裨将，偏用户体验、可部署性与新手路径 |
+| `chaos` | 混沌者，负责打破局部最优 |
+| `skeptic` | 质疑者，负责红队拆解与失败模式 |
+| `fusion` | 融合者，负责最终合并、决策账本与终版输出 |
+
+## 工作流一眼看懂
+
+```mermaid
+flowchart LR
+    A["cpj init"] --> B["cpj doctor"]
+    B --> C["cpj demo"]
+    C --> D["看到 10 席拓扑与完整产物链"]
+    D --> E["配置真实 providers"]
+    E --> F["cpj run"]
+    F --> G["variants"]
+    G --> H["fusion"]
+    H --> I["Obsidian / CLI 输出"]
+```
+
+## 安装
+
+当前仓库已经公开，但 README 仍按“最稳安装路径”来写。
 
 ### 1. 从源码目录安装
 
@@ -42,7 +90,7 @@ python -m pip install dist\pijiang-0.1.0-py3-none-any.whl
 
 ### 3. 从 PyPI 安装
 
-下面这个命令是发布后的目标形态，不代表当前仓库此刻已经发布到 PyPI：
+下面这个命令是未来的目标形态；是否已实际发布到 PyPI，请以仓库 release 或 PyPI 页面为准：
 
 ```powershell
 pipx install pijiang
@@ -60,9 +108,9 @@ pipx install pijiang
 4. 配置真实 providers
 5. `cpj run`
 
-这样可以先验证安装、模板、可视化和命令面本身没问题，再接真实 API。
+这条路径的意义很简单：先验证安装、模板、可视化和命令面没问题，再接真实 API。
 
-## 快速开始
+## 3 分钟上手
 
 ### 1. 初始化标准配置与 Obsidian 模板
 
@@ -70,20 +118,20 @@ pipx install pijiang
 cpj init --yes
 ```
 
-这会生成：
+它会生成：
 
-- 一份默认标准配置
+- 一份标准配置
 - 一份 `demo-config.json`
 - 官方 `10` 席议会拓扑
 - 官方 Obsidian Vault 模板
 
-### 2. 体检当前配置
+### 2. 先体检，而不是硬跑
 
 ```powershell
 cpj doctor
 ```
 
-如果你要拿去做自动化判断：
+如果你要把结果交给自动化系统判断：
 
 ```powershell
 cpj doctor --json
@@ -91,31 +139,30 @@ cpj doctor --json
 
 `doctor` 会明确告诉你：
 
-- 标准拓扑有多少席
-- 当前已启用多少席
-- 当前可真实运行多少席
+- 标准拓扑席位数
+- 当前已启用席位数
+- 当前可真实运行席位数
 - readiness 是 `ready / warning / blocker`
 - 哪些 provider 仍然只是占位模板
-- 每个 HTTP provider 当前是走 `relay_url`、结构化 `host/port/path_prefix`，还是 legacy `base_url`
+- 每个 HTTP provider 当前命中了 `relay_url`、结构化 endpoint，还是 legacy `base_url`
 
-### 3. 先跑零 API 演示
+### 3. 先跑 demo，看系统价值
 
 ```powershell
 cpj demo
 ```
 
-`cpj demo` 不调用真实外部 API，它会：
+`cpj demo` 不会调用真实外部 API，但会完整跑出一条 10 席产物链，并落到 Obsidian 模板目录里。默认会生成：
 
-- 生成一条完整的示例 run
-- 写入 Obsidian 模板目录
-- 产出 `01-run-overview.md`
-- 产出 `30-idea-map.md`
-- 产出 `50-fusion-decisions.md`
-- 产出 `90-final-solution-draft.md`
+- `00-brief.md`
+- `01-run-overview.md`
+- `30-idea-map.md`
+- `40-debate-round-1.md`
+- `41-debate-round-2.md`
+- `50-fusion-decisions.md`
+- `90-final-solution-draft.md`
 
-这样你不需要先搞真实密钥，也能看到皮匠到底长什么样。
-
-### 4. 配置真实 provider 后再运行
+### 4. 再接真实 provider
 
 ```powershell
 cpj run --brief "examples\briefs\project-parliament.md" --topic "议会项目级能力化"
@@ -127,19 +174,59 @@ cpj run --brief "examples\briefs\project-parliament.md" --topic "议会项目级
 2. 提醒多模型决策会明显更慢
 3. 要求你确认后才真正开始调用
 
-如果 `doctor` 发现 blocker，`cpj run` 会直接拒绝执行，避免你在默认配置下撞到 provider 缺失、环境变量缺失或 command bridge 未配置的问题。
+如果 `doctor` 有 blocker，`cpj run` 会直接拒绝执行。
+
+## Obsidian 可视化长什么样
+
+`Obsidian` 是首发强推荐默认体验，但不是硬阻断依赖。
+
+你至少会看到这样一套结构：
+
+```text
+obsidian-vault/
+├─ 00-Start-Here.md
+├─ 10-Dashboards/
+│  ├─ 当前议题总览.md
+│  ├─ 10席议会拓扑.md
+│  ├─ 运行历史.md
+│  └─ 执行进度.md
+└─ 皮匠/
+   └─ <topic>/
+      └─ 方案工厂/
+         └─ <run-id>/
+            ├─ 00-brief.md
+            ├─ 01-run-overview.md
+            ├─ 10-controller.md
+            ├─ 11-planning.md
+            ├─ 12-search-1.md
+            ├─ 13-search-2.md
+            ├─ 14-marshal-1.md
+            ├─ 15-marshal-2.md
+            ├─ 16-marshal-3.md
+            ├─ 17-chaos.md
+            ├─ 18-skeptic.md
+            ├─ 19-fusion.md
+            ├─ 30-idea-map.md
+            ├─ 40-debate-round-1.md
+            ├─ 41-debate-round-2.md
+            ├─ 50-fusion-decisions.md
+            ├─ 90-final-solution-draft.md
+            └─ 99-index.md
+```
+
+它的价值不是“把 Markdown 写进 Vault”这么简单，而是把运行过程变成可浏览、可复盘、可对照的结构化产物链。
 
 ## 第三方中转站与自定义端口
 
-这层能力只是在扩展 HTTP 接入兼容面，不会改变皮匠的议会机制。
+这一层只是扩展 HTTP 接入兼容面，不会改变皮匠的议会机制。
 
 - 它支持的是 provider endpoint 的兼容升级
 - 不是把多模型议会退化成单模型角色扮演
-- `cpj run` 仍然要先通过 readiness gate
+- `cpj run` 仍然必须先通过 readiness gate
 
-你可以在 `cpj init` 生成的 `config.json` 里，直接编辑 provider 的 endpoint 字段。
+你可以在 `cpj init` 生成的 `config.json` 里直接编辑 provider 的 endpoint 字段。
 
-### 1. 旧写法：直接使用 `base_url`
+### 旧写法：直接使用 `base_url`
 
 ```json
 {
@@ -149,7 +236,7 @@ cpj run --brief "examples\briefs\project-parliament.md" --topic "议会项目级
 }
 ```
 
-### 2. 结构化写法：`host + port + path_prefix`
+### 结构化写法：`host + port + path_prefix`
 
 ```json
 {
@@ -162,7 +249,7 @@ cpj run --brief "examples\briefs\project-parliament.md" --topic "议会项目级
 }
 ```
 
-### 3. 中转站直连：`relay_url`
+### 中转站直连：`relay_url`
 
 ```json
 {
@@ -178,46 +265,16 @@ cpj run --brief "examples\briefs\project-parliament.md" --topic "议会项目级
 2. `host + port + path_prefix`
 3. `base_url`
 
-`cpj doctor --json` 会输出每个 HTTP provider 的：
+## 兼容面
 
-- `endpoint_source`
-- `effective_base_url`
-- `normalized`
-
-这样你可以直接看出当前到底命中了哪种接入方式，以及路径有没有被标准化。
-
-## 默认议会拓扑
-
-官方标准配置固定为 `10` 席完整议会：
-
-1. `controller`：主控
-2. `planning`：规划者
-3. `search-1`：外部搜索者 1
-4. `search-2`：外部搜索者 2
-5. `marshal-1`：裨将 1
-6. `marshal-2`：裨将 2
-7. `marshal-3`：裨将 3
-8. `chaos`：混沌者
-9. `skeptic`：质疑者
-10. `fusion`：融合者
-
-关键约束：
-
-- 默认标准就是 `10` 席
-- 正常模式至少支持 `6` 个以上模型位
-- 少于 `10` 席会进入 `reduced_council_mode`
-- 少于 `6` 个可真实运行 profile 只能视为 `minimal_mode`
-
-## 官方兼容层
-
-官方首发兼容面：
+官方首发兼容：
 
 - `OpenAI-compatible`
 - `Ollama`
 - `Alibaba Coding Plan`
 - `Volcengine Coding Plan`
 
-可选社区适配器：
+可选社区适配：
 
 - `Codex CLI`
 - `Claude Code CLI`
@@ -227,26 +284,46 @@ cpj run --brief "examples\briefs\project-parliament.md" --topic "议会项目级
 
 - `controller` 独立于 `planning`
 - `coding plan` 是官方一等公民 Planning Provider
-- 系统只建议用户给 controller 选强模型，例如 `Opus 4.6`、`GPT-5.4`、`Gemini 3.1 Pro` 或高质量 coding plan，但不强制
+- 系统建议把强模型放在 controller 位，但不强制
 
-## Obsidian 可视化
+## 项目状态
 
-Obsidian 是首发强推荐默认体验，但不是硬阻断依赖。
+当前更接近 `v0.x` 阶段，重点在：
 
-启用后会生成一套官方模板，至少包含：
+- 先把命令面、demo、Obsidian 模板和 readiness gate 做稳
+- 让陌生用户下载后能先看到价值，再接真实 provider
+- 把 provider endpoint 兼容层做成向后兼容升级
 
-- 当前议题总览
-- `10` 席议会拓扑
-- 外部搜索位视图
-- 裨将层视图
-- 混沌者与质疑者视图
-- idea map 视图
-- fusion decisions 视图
-- final draft 视图
-- run history
-- 当前执行进度
+## 路线图
 
-如果不启用 Obsidian，系统仍可运行，但会明确提示这是 `visualization_degraded` 的降级体验。
+短期路线已经整理成单独文档：[docs/ROADMAP.md](docs/ROADMAP.md)
+
+当前主线分三段：
+
+### Phase A
+
+- 稳定 `cpj init -> doctor -> demo -> run`
+- 巩固多 provider endpoint 兼容
+- 收敛开源 README、安装链路和基础 CI
+
+### Phase B
+
+- 做更强的宿主集成产物
+- 强化 Obsidian 面板与 run history
+- 增加更多真实 provider 冒烟验证
+
+### Phase C
+
+- 把议会从“命令行能力层”继续推向项目级工作流系统
+- 强化模板、决策账本、长期演化能力
+
+## 仓库结构
+
+- `pijiang/`: 正式发布主包
+- `tests/`: CLI、provider endpoint、路径与回归测试
+- `docs/`: 公开文档
+- `examples/`: 示例 brief
+- `tools/solution_factory/`: 历史兼容与内部参考
 
 ## 当前命令面
 
@@ -256,10 +333,6 @@ Obsidian 是首发强推荐默认体验，但不是硬阻断依赖。
 - `cpj integrate <host>`
 - `cpj run`
 
-## 开发说明
-
-仓内仍保留 `tools/solution_factory` 作为历史兼容与内部参考，但正式发布包只应围绕 `pijiang/*` 演进。
-
 ## License
 
-本项目采用 `MIT` License。
+本项目采用 `MIT` License，详见 [LICENSE](LICENSE)。
