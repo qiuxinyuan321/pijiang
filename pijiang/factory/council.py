@@ -3,11 +3,13 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from .analysis import audit_council_run
 from .runtime_support import (
     FINAL_DECISIONS_SCHEMA,
     FINAL_DRAFT_SCHEMA,
@@ -27,7 +29,9 @@ from .runtime_support import (
     render_index_markdown,
     render_stage_markdown,
     split_project_path,
+    trim_to_canonical_markdown,
     utc_now_iso,
+    variant_quality_issue,
     write_json,
     write_text,
 )
@@ -38,6 +42,7 @@ from .types import CouncilSeat, ExecutionRequest, RunProgressSnapshot
 
 
 ProgressCallback = Callable[[RunProgressSnapshot, dict[str, Any]], None]
+HEARTBEAT_INTERVAL_SEC = 15
 
 
 SEAT_LIBRARY: dict[str, dict[str, str]] = {
@@ -128,6 +133,59 @@ def _estimate_wait_label(seats: list[CouncilSeat], provider_count: int) -> str:
     return "快速"
 
 
+def _heartbeat_message(prefix: str, started_at: float) -> str:
+    elapsed = max(1, int(time.monotonic() - started_at))
+    return f"{prefix}，已耗时 {elapsed}s。"
+
+
+def _retry_backoff_seconds(values: list[int], attempt: int) -> int:
+    if not values:
+        return 0
+    index = max(0, min(attempt - 1, len(values) - 1))
+    return max(0, int(values[index]))
+
+
+class _HeartbeatLoop:
+    def __init__(
+        self,
+        *,
+        tracker: "CouncilRunTracker",
+        stage: str,
+        seat_id: str = "",
+        provider_profile: str = "",
+        message_prefix: str,
+        interval_sec: int | None = None,
+    ) -> None:
+        self.tracker = tracker
+        self.stage = stage
+        self.seat_id = seat_id
+        self.provider_profile = provider_profile
+        self.message_prefix = message_prefix
+        self.interval_sec = interval_sec if interval_sec is not None else HEARTBEAT_INTERVAL_SEC
+        self._stop = threading.Event()
+        self._started = time.monotonic()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval_sec):
+            message = _heartbeat_message(self.message_prefix, self._started)
+            self.tracker.touch(message=message, seat_id=self.seat_id)
+            self.tracker.emit(
+                "heartbeat",
+                stage=self.stage,
+                seat_id=self.seat_id,
+                provider_profile=self.provider_profile,
+                message=message,
+            )
+
+
 def _run_overview_markdown(
     *,
     brief_path: Path,
@@ -186,7 +244,10 @@ class CouncilRunTracker:
             "seat_statuses": {seat.seat_id: "pending" for seat in seats},
             "completed_seat_count": 0,
             "failed_seat_count": 0,
+            "running_seat_ids": [],
+            "current_seat_id": "",
             "current_message": "等待开始",
+            "updated_at": manifest["started_at"],
             "artifacts": {},
         }
         write_json(self.status_path, self.state)
@@ -200,6 +261,9 @@ class CouncilRunTracker:
             completed_seat_count=self.state["completed_seat_count"],
             failed_seat_count=self.state["failed_seat_count"],
             current_message=self.state["current_message"],
+            running_seat_ids=list(self.state["running_seat_ids"]),
+            current_seat_id=self.state["current_seat_id"],
+            updated_at=self.state["updated_at"],
             artifacts=dict(self.state["artifacts"]),
         )
 
@@ -225,6 +289,8 @@ class CouncilRunTracker:
         with self.lock:
             self.state["stage"] = stage
             self.state["current_message"] = message
+            self.state["current_seat_id"] = "fusion" if stage == "fusion" else ""
+            self.state["updated_at"] = utc_now_iso()
             write_json(self.status_path, self.state)
         self.emit("stage-change", stage=stage, message=message)
 
@@ -237,16 +303,34 @@ class CouncilRunTracker:
             self.state["failed_seat_count"] = sum(
                 1 for value in self.state["seat_statuses"].values() if value == "failed"
             )
+            self.state["running_seat_ids"] = [
+                current_seat_id
+                for current_seat_id, current_status in self.state["seat_statuses"].items()
+                if current_status == "running"
+            ]
             if message:
                 self.state["current_message"] = message
+            self.state["current_seat_id"] = seat_id if status == "running" else (
+                self.state["running_seat_ids"][0] if self.state["running_seat_ids"] else self.state["current_seat_id"]
+            )
+            self.state["updated_at"] = utc_now_iso()
             write_json(self.status_path, self.state)
         self.emit("seat-status", seat_id=seat_id, provider_profile=provider_profile, message=message or status)
 
     def add_artifact(self, key: str, value: str) -> None:
         with self.lock:
             self.state["artifacts"][key] = value
+            self.state["updated_at"] = utc_now_iso()
             write_json(self.status_path, self.state)
         self.emit("artifact", message=f"{key} => {value}")
+
+    def touch(self, *, message: str, seat_id: str = "") -> None:
+        with self.lock:
+            self.state["current_message"] = message
+            if seat_id:
+                self.state["current_seat_id"] = seat_id
+            self.state["updated_at"] = utc_now_iso()
+            write_json(self.status_path, self.state)
 
     def complete(self, status: str, message: str) -> None:
         with self.lock:
@@ -254,6 +338,9 @@ class CouncilRunTracker:
             self.state["stage"] = "completed" if status == "success" else "failed"
             self.state["finished_at"] = utc_now_iso()
             self.state["current_message"] = message
+            self.state["current_seat_id"] = ""
+            self.state["running_seat_ids"] = []
+            self.state["updated_at"] = self.state["finished_at"]
             write_json(self.status_path, self.state)
         self.emit("run-complete", stage=self.state["stage"], message=message)
 
@@ -314,6 +401,7 @@ class CouncilEngine:
                     "seat_type": seat.seat_type,
                     "display_name": seat.display_name,
                     "profile_id": seat.profile_id,
+                    "obsidian_filename": self._seat_lane(seat).obsidian_filename,
                 }
                 for seat in seats
             ],
@@ -374,6 +462,9 @@ class CouncilEngine:
             sections=sections,
         )
 
+    def _execution_policy(self) -> Any:
+        return self.config.execution_policy
+
     def _execute_seat(
         self,
         *,
@@ -390,24 +481,80 @@ class CouncilEngine:
         if profile is None:
             raise ProviderExecutionError(f"missing profile for seat {seat.seat_id}")
         lane = self._seat_lane(seat)
+        seat_run_dir = ensure_directory(run_dir / "seats" / seat.seat_id)
         prompt = build_variant_prompt(brief_text, lane)
-        tracker.set_seat_status(
-            seat.seat_id,
-            "running",
-            message=f"正在生成 {seat.display_name} 产物",
-            provider_profile=profile.id,
-        )
+        write_text(seat_run_dir / "prompt.txt", prompt)
         adapter = adapter_for_profile(profile)
-        output_path = ensure_directory(run_dir / "seats" / seat.seat_id) / "last-message.txt"
-        try:
-            response = adapter.execute(
-                ExecutionRequest(
-                    prompt=prompt,
-                    output_mode="variant_markdown",
-                    timeout_sec=timeout_sec,
-                    output_path=output_path,
-                )
+        policy = self._execution_policy()
+        max_attempts = max(1, int(policy.max_attempts_per_seat))
+        last_error = "unknown error"
+        for attempt in range(1, max_attempts + 1):
+            tracker.set_seat_status(
+                seat.seat_id,
+                "running",
+                message=f"正在生成 {seat.display_name} 产物（第 {attempt} 次尝试）",
+                provider_profile=profile.id,
             )
+            tracker.emit(
+                "seat-attempt-start",
+                stage="variants",
+                seat_id=seat.seat_id,
+                provider_profile=profile.id,
+                message=f"{seat.display_name} attempt {attempt} started",
+            )
+            output_path = seat_run_dir / f"last-message.attempt-{attempt}.txt"
+            heartbeat = _HeartbeatLoop(
+                tracker=tracker,
+                stage="variants",
+                seat_id=seat.seat_id,
+                provider_profile=profile.id,
+                message_prefix=f"{seat.display_name} 正在运行第 {attempt} 次尝试",
+            )
+            heartbeat.start()
+            try:
+                response = adapter.execute(
+                    ExecutionRequest(
+                        prompt=prompt,
+                        output_mode="variant_markdown",
+                        timeout_sec=timeout_sec,
+                        output_path=output_path,
+                    )
+                )
+            except Exception as exc:
+                heartbeat.stop()
+                last_error = str(exc)
+                write_text(seat_run_dir / f"stderr.attempt-{attempt}.log", str(exc))
+                tracker.emit(
+                    "seat-attempt-failure",
+                    stage="variants",
+                    seat_id=seat.seat_id,
+                    provider_profile=profile.id,
+                    message=last_error,
+                )
+                if attempt < max_attempts:
+                    time.sleep(_retry_backoff_seconds(policy.retry_backoff_seconds, attempt))
+                    continue
+                break
+            heartbeat.stop()
+            raw_stdout = response.raw_stdout or ""
+            raw_stderr = response.raw_stderr or ""
+            write_text(seat_run_dir / f"stdout.attempt-{attempt}.log", raw_stdout)
+            write_text(seat_run_dir / f"stderr.attempt-{attempt}.log", raw_stderr)
+            response_content = trim_to_canonical_markdown((response.content or "").strip())
+            quality_issue = variant_quality_issue(lane, response_content)
+            if quality_issue:
+                last_error = f"quality gate failed: {quality_issue}"
+                tracker.emit(
+                    "seat-attempt-failure",
+                    stage="variants",
+                    seat_id=seat.seat_id,
+                    provider_profile=profile.id,
+                    message=last_error,
+                )
+                if attempt < max_attempts:
+                    time.sleep(_retry_backoff_seconds(policy.retry_backoff_seconds, attempt))
+                    continue
+                break
             result = self._write_lane_result(
                 lane=lane,
                 seat=seat,
@@ -415,9 +562,9 @@ class CouncilEngine:
                 created_at=created_at,
                 run_dir=run_dir,
                 output_dir=output_dir,
-                response_content=response.content,
-                raw_stdout=response.raw_stdout,
-                raw_stderr=response.raw_stderr,
+                response_content=response_content,
+                raw_stdout=raw_stdout,
+                raw_stderr=raw_stderr,
                 status="success",
             )
             tracker.set_seat_status(
@@ -426,29 +573,43 @@ class CouncilEngine:
                 message=f"{seat.display_name} 已完成",
                 provider_profile=profile.id,
             )
+            tracker.emit(
+                "seat-success",
+                stage="variants",
+                seat_id=seat.seat_id,
+                provider_profile=profile.id,
+                message=f"{seat.display_name} 已完成",
+            )
             tracker.add_artifact(seat.seat_id, str(result.normalized_markdown_path))
             return result
-        except Exception as exc:
-            result = self._write_lane_result(
-                lane=lane,
-                seat=seat,
-                run_id=run_id,
-                created_at=created_at,
-                run_dir=run_dir,
-                output_dir=output_dir,
-                response_content=f"# 执行失败\n\n{exc}",
-                raw_stdout="",
-                raw_stderr=str(exc),
-                error_summary=str(exc),
-                status="failed",
-            )
-            tracker.set_seat_status(
-                seat.seat_id,
-                "failed",
-                message=f"{seat.display_name} 执行失败",
-                provider_profile=profile.id,
-            )
-            return result
+
+        result = self._write_lane_result(
+            lane=lane,
+            seat=seat,
+            run_id=run_id,
+            created_at=created_at,
+            run_dir=run_dir,
+            output_dir=output_dir,
+            response_content=f"# 执行失败\n\n{last_error}",
+            raw_stdout="",
+            raw_stderr=last_error,
+            error_summary=last_error,
+            status="failed",
+        )
+        tracker.set_seat_status(
+            seat.seat_id,
+            "failed",
+            message=f"{seat.display_name} 执行失败",
+            provider_profile=profile.id,
+        )
+        tracker.emit(
+            "seat-failure",
+            stage="variants",
+            seat_id=seat.seat_id,
+            provider_profile=profile.id,
+            message=last_error,
+        )
+        return result
 
     def _fusion_profiles(self) -> list[str]:
         topology = self.config.council_topology
@@ -474,6 +635,7 @@ class CouncilEngine:
         tracker: CouncilRunTracker,
         filename: str,
     ) -> tuple[str, str, str]:
+        tracker.touch(message=f"正在执行融合步骤 `{stage}`。", seat_id="fusion")
         tracker.emit("fusion-step-start", stage="fusion", message=f"开始执行 {stage}")
         last_error = "no provider attempted"
         output_path = fusion_dir / f"{stage}.last-message.txt"
@@ -482,6 +644,14 @@ class CouncilEngine:
             if profile is None or not profile.enabled:
                 continue
             adapter = adapter_for_profile(profile)
+            heartbeat = _HeartbeatLoop(
+                tracker=tracker,
+                stage="fusion",
+                seat_id="fusion",
+                provider_profile=profile.id,
+                message_prefix=f"融合步骤 {stage} 正在调用 {profile.id}",
+            )
+            heartbeat.start()
             try:
                 response = adapter.execute(
                     ExecutionRequest(
@@ -492,6 +662,7 @@ class CouncilEngine:
                         output_path=output_path,
                     )
                 )
+                heartbeat.stop()
                 body = response.content.strip()
                 if not body:
                     raise ProviderExecutionError(f"{profile.id} returned empty content")
@@ -514,8 +685,10 @@ class CouncilEngine:
                     provider_profile=profile.id,
                     message=f"{stage} 已完成",
                 )
+                tracker.touch(message=f"融合步骤 `{stage}` 已完成。", seat_id="fusion")
                 return body, profile.id, profile.model
             except Exception as exc:
+                heartbeat.stop()
                 last_error = f"{profile.id}: {exc}"
                 tracker.emit(
                     "fusion-step-failure",
@@ -689,7 +862,6 @@ class CouncilEngine:
         )
         write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results))
         tracker.add_artifact("final_index", str(output_dir / "99-index.md"))
-        tracker.complete("success", "议会运行完成")
         summary = {
             "run_id": run_id,
             "status": "success",
@@ -700,5 +872,12 @@ class CouncilEngine:
             "seat_count": len(seats),
             "topic": topic,
         }
+        audit = audit_council_run(summary)
+        summary["truth_audit_path"] = str(output_dir / "70-run-truth-audit.json")
+        summary["fake_success_flag_count"] = len(audit.fake_success_flags)
+        summary["regression_case_count"] = len(audit.regression_case_paths)
+        tracker.add_artifact("truth_audit", summary["truth_audit_path"])
+        tracker.add_artifact("regression_cases_index", str(output_dir / "80-regression-cases-index.md"))
+        tracker.complete("success", "议会运行完成")
         write_json(run_dir / "summary.json", summary)
         return summary

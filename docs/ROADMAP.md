@@ -22,6 +22,7 @@
 - 可信 demo fixture、golden outputs、replay 或 trace
 - repo-facts pack 与 repo-grounded lint
 - Run Manifest、状态目录、结构化日志、partial artifact、support bundle
+- run 后 truth audit、regression cases、benchmark gate
 - 支持矩阵、smoke matrix、triage 边界
 - 单一路径发布基线
 

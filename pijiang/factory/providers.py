@@ -188,8 +188,16 @@ class DemoAdapter(BaseProviderAdapter):
             if line.startswith("SF-STAGE:"):
                 stage = line.split(":", 1)[1].strip()
         if stage == "variant":
+            evidence_block = ""
+            if lane_id in {"search-1", "search-2"}:
+                evidence_block = (
+                    "- 证据：https://example.com/pijiang/demo-search-note\n"
+                    "- 证据：https://github.com/example/pijiang-demo-case\n"
+                    "- 证据：https://example.com/pijiang/demo-benchmark\n\n"
+                )
             content = (
                 f"# 问题定义\n{lane_id} 的示例输出\n\n"
+                f"{evidence_block}"
                 "# 目标与非目标\n演示皮匠安装后无需真实 API 也能看到完整链路。\n\n"
                 "# 用户/场景\n新用户首次安装后的 demo 体验。\n\n"
                 "# 系统架构\n10 席多模型议会 + Obsidian 可视化。\n\n"

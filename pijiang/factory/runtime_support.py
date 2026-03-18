@@ -40,6 +40,19 @@ SECTION_ALIAS_MAP = {
     for alias in aliases
 }
 
+SEARCH_SEAT_IDS = {"search-1", "search-2"}
+OUTPUT_POLLUTION_MARKERS = (
+    '{"type":"step_start"',
+    '{"type":"tool_use"',
+    "functions.bash",
+    "现在我来生成",
+    "下面我来",
+    "我先核对",
+    "我先检查",
+    "我需要查看",
+    "API Error:",
+)
+
 FINAL_DECISIONS_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -210,6 +223,65 @@ def parse_variant_sections(raw_text: str) -> dict[str, str]:
     for name in CANONICAL_SECTIONS:
         sections[name] = "\n".join(item for item in collected[name]).strip()
     return sections
+
+
+def has_canonical_heading(raw_text: str) -> bool:
+    heading_pattern = re.compile(r"^\s{0,3}#{1,6}\s*(.+?)\s*$")
+    for line in raw_text.splitlines():
+        matched = heading_pattern.match(line)
+        if not matched:
+            continue
+        canonical = SECTION_ALIAS_MAP.get(normalize_heading(matched.group(1)), "")
+        if canonical:
+            return True
+    return False
+
+
+def trim_to_canonical_markdown(raw_text: str) -> str:
+    heading_pattern = re.compile(r"^\s{0,3}#{1,6}\s*(.+?)\s*$")
+    lines = raw_text.splitlines()
+    for index, line in enumerate(lines):
+        matched = heading_pattern.match(line)
+        if not matched:
+            continue
+        canonical = SECTION_ALIAS_MAP.get(normalize_heading(matched.group(1)), "")
+        if canonical:
+            return "\n".join(lines[index:]).strip()
+    return raw_text.strip()
+
+
+def extract_evidence_refs(text: str) -> list[str]:
+    refs: list[str] = []
+    refs.extend(re.findall(r"https?://[^\s)>\]]+", text))
+    lowered = text.lower()
+    for anchor in ("github", "readme", "roadmap", "ci", "contributing", "issue", "release", "cpj "):
+        if anchor in lowered:
+            refs.append(anchor.strip())
+    deduped: list[str] = []
+    for item in refs:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
+def variant_quality_issue(lane: LaneSpec, raw_text: str) -> str:
+    trimmed = raw_text.strip()
+    if not trimmed:
+        return "output is empty"
+    if not has_canonical_heading(trimmed):
+        return "output does not contain canonical markdown headings"
+    sections = parse_variant_sections(trimmed)
+    filled_sections = sum(1 for value in sections.values() if value.strip())
+    if filled_sections < len(CANONICAL_SECTIONS):
+        return f"output only filled {filled_sections}/{len(CANONICAL_SECTIONS)} canonical sections"
+    for marker in OUTPUT_POLLUTION_MARKERS:
+        if marker in trimmed:
+            return f"output contains polluted marker `{marker}`"
+    if lane.id in SEARCH_SEAT_IDS:
+        evidence_count = len(extract_evidence_refs(trimmed))
+        if evidence_count < 3:
+            return f"search seat only produced {evidence_count} evidence refs"
+    return ""
 
 
 def frontmatter_block(payload: dict[str, Any]) -> str:
@@ -409,6 +481,15 @@ def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[La
 def build_variant_prompt(brief_text: str, lane: LaneSpec) -> str:
     section_template = "\n".join(f"# {name}" for name in CANONICAL_SECTIONS)
     special_block = f"额外要求：\n{lane.special_instructions.strip()}\n\n" if lane.special_instructions.strip() else ""
+    search_hardening_block = ""
+    if lane.id in SEARCH_SEAT_IDS:
+        search_hardening_block = (
+            "搜索位硬约束：\n"
+            "1. 你不是普通分析位，你必须先完成真实外部检索，再给结论。\n"
+            "2. 至少保留 5 条外部证据，优先使用完整 URL 或 GitHub 仓库链接。\n"
+            "3. 对每条关键外部观察，说明：借鉴点 / 不借鉴点 / 适用原因。\n"
+            "4. 如果检索失败或证据不足，必须明确写出缺口，不允许假装已经完成搜索。\n\n"
+        )
     return (
         f"{stage_marker_block('variant', lane.id)}\n"
         f"你是多模型方案工厂中的 `{lane.id}` 产线。\n"
@@ -419,6 +500,7 @@ def build_variant_prompt(brief_text: str, lane: LaneSpec) -> str:
         "1. 聚焦项目方案脑暴，不进入写代码阶段。\n"
         "2. 观点要便于后续多轮融合。\n"
         "3. 每个章节都给出实质内容。\n\n"
+        f"{search_hardening_block}"
         f"{special_block}"
         f"Brief:\n{brief_text.strip()}\n"
     )

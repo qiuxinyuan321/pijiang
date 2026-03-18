@@ -25,6 +25,7 @@
 更细的图解说明见 [docs/demo-visuals.md](docs/demo-visuals.md)。
 如果你准备参与贡献，先看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 如果你想看当前官方主线和首次成功路径，直接看 [docs/first-success-path.md](docs/first-success-path.md)。
+如果你想看最近一轮已回流能力与验证边界，直接看 [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md)。
 
 ## 10 席议会拓扑
 
@@ -114,6 +115,28 @@ flowchart LR
 - 有对抗层
 - 有融合层
 - 有可回看的结构化产物链
+
+## 已回流能力
+
+当前已经从本地议会回流、并在 `pijiang/factory` 主运行链内生效的能力，集中在这几项：
+
+- 运行中状态快照增强：`status.json` 现在会持续写出 `running_seat_ids`、`current_seat_id`、`updated_at`
+- run 后真伪审计：每次 run 完成后都会写出 `70-run-truth-audit.json`
+- regression case 留痕：失败 seat 会写入 `regression-cases/` 与 `80-regression-cases-index.md`
+- seat 质量门：seat 产物会经过 canonical headings、section completeness、污染标记与搜索证据检查
+- 搜索位硬约束：`search-1 / search-2` 不再只是名义搜索位，而是要求明确外部证据
+
+这些能力的边界也很明确：
+
+- 已接通：`ExecutionPolicy.max_attempts_per_seat`、`retry_backoff_seconds`
+- 仍保留但未正式宣称生效：`soft_budget`、`hard_budget`、`circuit_breaker_threshold`、`quality_retry_threshold`
+- 没有回流：本地议会的字节级 subprocess streaming
+
+这一轮的回流门槛不是“所有 seat 都完美”，而是：
+
+- 已完成 `single / reduced6 / standard10` 三档真实 benchmark
+- 三档都没有出现 `fake_success`
+- 已明确把未过关的链路沉淀成 regression case，而不是假装已经稳定
 
 ## 它解决什么问题
 

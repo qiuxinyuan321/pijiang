@@ -140,6 +140,9 @@ class RunProgressSnapshot:
     completed_seat_count: int
     failed_seat_count: int
     current_message: str
+    running_seat_ids: list[str] = field(default_factory=list)
+    current_seat_id: str = ""
+    updated_at: str = ""
     artifacts: dict[str, str] = field(default_factory=dict)
 
 
