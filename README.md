@@ -24,6 +24,7 @@
 
 更细的图解说明见 [docs/demo-visuals.md](docs/demo-visuals.md)。
 如果你准备参与贡献，先看 [CONTRIBUTING.md](CONTRIBUTING.md)。
+如果你想看当前官方主线和首次成功路径，直接看 [docs/first-success-path.md](docs/first-success-path.md)。
 
 ## 10 席议会拓扑
 
@@ -342,6 +343,8 @@ obsidian-vault/
 - `coding plan` 是官方一等公民 Planning Provider
 - 系统建议把强模型放在 controller 位，但不强制
 
+更细的支持分层见 [docs/support-matrix.md](docs/support-matrix.md)。
+
 ## 项目状态
 
 当前更接近 `v0.x` 阶段，重点在：
@@ -350,9 +353,40 @@ obsidian-vault/
 - 让陌生用户下载后能先看到价值，再接真实 provider
 - 把 provider endpoint 兼容层做成向后兼容升级
 
+## 当前官方主线
+
+当前官方主线已经收敛成一条黄金路径：
+
+- `cpj init -> cpj doctor -> cpj demo -> cpj run`
+- `Phase A+` 先只做“首次可信成功路径”
+- `Phase B` 再做 Obsidian 单宿主闭环
+- `Phase C` 才进入更通用的宿主 contract 与能力化抽象
+
+如果你只想先做对一次，先看：
+
+- [docs/first-success-path.md](docs/first-success-path.md)
+- [docs/support-matrix.md](docs/support-matrix.md)
+- [docs/release-policy.md](docs/release-policy.md)
+
+当前 issue backlog 入口：
+
+- [GitHub Issues](https://github.com/qiuxinyuan321/pijiang/issues)
+
+## 当前明确不做什么
+
+这些方向不是否定，而是当前不抢主线：
+
+- 不把多宿主深集成提前到 `Phase A+`
+- 不在官方主路径未稳定前同时铺太多发布渠道
+- 不在支持矩阵尚未冻结前对更多 provider 做深度承诺
+- 不把“demo 路径”和“真实 run 路径”做成两套不同契约
+- 不把项目重新拉回“单模型扮演多个角色”的叙事
+
 ## 路线图
 
 短期路线已经整理成单独文档：[docs/ROADMAP.md](docs/ROADMAP.md)
+当前支持边界见：[docs/support-matrix.md](docs/support-matrix.md)
+发布与升级规则见：[docs/release-policy.md](docs/release-policy.md)
 
 如果你想先从“看图理解皮匠”开始，看这里：[docs/demo-visuals.md](docs/demo-visuals.md)
 如果你想直接参与仓库贡献，看这里：[CONTRIBUTING.md](CONTRIBUTING.md)
