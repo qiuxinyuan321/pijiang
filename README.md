@@ -1,5 +1,8 @@
 # 皮匠
 
+[![CI](https://github.com/qiuxinyuan321/pijiang/actions/workflows/ci.yml/badge.svg)](https://github.com/qiuxinyuan321/pijiang/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > 三个臭裨将，顶个诸葛亮。
 
 `皮匠` 是一个面向复杂议题的多模型议会能力层。
