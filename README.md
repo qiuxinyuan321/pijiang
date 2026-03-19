@@ -27,6 +27,7 @@
 
 | 你最关心什么 | 先看哪里 |
 | --- | --- |
+| 我想看完整文档导航 | [docs/index.md](docs/index.md) |
 | 我想先跑通一次 | [3 分钟上手](#3-分钟上手) |
 | 我想先理解它到底是什么 | [它是什么，不是什么](#它是什么不是什么) |
 | 我想看图解与议会结构 | [docs/demo-visuals.md](docs/demo-visuals.md) |
@@ -381,6 +382,7 @@ obsidian-vault/
 
 ## 路线图与文档入口
 
+- 文档导航：[docs/index.md](docs/index.md)
 - 路线图：[docs/ROADMAP.md](docs/ROADMAP.md)
 - 支持矩阵：[docs/support-matrix.md](docs/support-matrix.md)
 - 发布策略：[docs/release-policy.md](docs/release-policy.md)
