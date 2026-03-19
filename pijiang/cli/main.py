@@ -143,6 +143,7 @@ def _doctor_payload(config: PijiangConfig) -> dict[str, object]:
         "runnable_seat_count": len(runnable_seats),
         "council_mode": council_mode(config),
         "readiness_status": readiness.status,
+        "provider_preflight_status": readiness.status,
         "active_profile_count": unique_active_profile_count(config),
         "runnable_profile_count": unique_active_profile_count(config, runnable_only=True),
         "active_profile_ids": sorted(active_profiles),
@@ -179,6 +180,7 @@ def _render_doctor_human(payload: dict[str, object]) -> str:
         "皮匠部署体检",
         "",
         f"- readiness: {payload['readiness_status']}",
+        f"- provider preflight: {payload['provider_preflight_status']}",
         f"- 标准拓扑席位: {payload['standard_topology_seat_count']}",
         f"- 已启用席位: {payload['enabled_seat_count']}",
         f"- 可真实运行席位: {payload['runnable_seat_count']}",
@@ -292,10 +294,10 @@ def command_run(args: argparse.Namespace) -> int:
         readiness = build_readiness_report(config)
         if readiness.blockers:
             print(_render_doctor_human(_doctor_payload(config)))
-            return _print_error("当前配置存在 blocker，已拒绝真实运行。先修复后再执行，或先运行 cpj demo。")
+            return _print_error("当前配置存在 provider preflight blocker，已拒绝真实运行。先修复后再执行，或先运行 cpj demo。")
         if readiness.warnings and not args.allow_degraded:
             print(_render_doctor_human(_doctor_payload(config)))
-            return _print_error("当前配置存在 warning。若你确认要带降级继续运行，请显式加上 --allow-degraded。")
+            return _print_error("当前配置存在 provider preflight warning。若你确认要带降级继续运行，请显式加上 --allow-degraded。")
 
         first_run = not config.onboarding.first_run_acknowledged
         if first_run or not config.onboarding.skip_repeated_intro:

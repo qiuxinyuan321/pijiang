@@ -12,12 +12,16 @@
 - run 后 truth audit
   - 每次 run 完成后自动写出 `70-run-truth-audit.json`
   - summary 会回填 `truth_audit_path`、`fake_success_flag_count`、`regression_case_count`
+  - `truth audit` 现在会显式给出 `audit_status` 与 `reason_codes`
 - regression cases
   - 失败或退化 seat 会写入 `regression-cases/`
   - 同步生成 `80-regression-cases-index.md`
 - seat 质量门
   - seat 正文在落成最终 Markdown 前，会经过 canonical headings、section completeness、污染标记与搜索证据检查
   - 当前只接通 `ExecutionPolicy.max_attempts_per_seat` 与 `retry_backoff_seconds`
+- provider preflight 语义
+  - `cpj doctor` 与 `cpj run` 现在共享同一套 preflight gate
+  - `cpj run` 会明确拒绝带 blocker 的真实 provider 调用
 - 搜索位硬化
   - `search-1 / search-2` 不再只是名义搜索位
   - 搜索 seat 若没有证据，不应被视作正常成功
@@ -49,6 +53,15 @@
   - run: `sf-20260319-003734-84632`
   - 结果：`fake_success = 0`，`evidence_integrity = 100`
   - 说明：少席位模式更稳，但结构完整度仍低于理想值
+- 本地议会当前同议题重跑
+  - run: `sf-20260319-104416-60156`
+  - 结果：已能完整产出 `50-fusion-decisions.md`、`70-run-truth-audit.json`、`80-regression-cases-index.md`、`90-final-solution-draft.md`
+  - 状态：`audit_status = degraded`
+  - 说明：这次证明了本地议会已恢复“完整收敛链路”，但 seat 级稳定性仍未收敛到 `success`
+- 本地失败样本回审
+  - run: `sf-20260319-090954-84856`
+  - 结果：现在可被识别为 `fusion_parse_failure`
+  - 说明：旧失败不再只是历史事故，而是正式 regression case
 
 ## benchmark gate 摘要
 
@@ -77,6 +90,8 @@
 - benchmark gate 已经证明这轮回流能力没有制造伪成功
 - 真实失败与退化已经被留痕，而不是被成功表象掩盖
 - 因此只回流已经被验证有效的 runtime/审计/质量门能力，不把 budget/circuit breaker 一起带进来
+- `standard10` 当前只是 `display default`，不是默认最优结论
+- `reduced6` 当前只是 `evaluation profile`，不是官方推荐配置
 
 基于这三条真实样本，本轮只回流以下能力：
 

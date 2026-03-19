@@ -137,16 +137,20 @@ def _build_quality_assessment(seat_id: str, markdown_text: str) -> QualityAssess
     anchor_hits = _count_anchor_hits(markdown_text)
     evidence_count = len(_extract_evidence_refs(markdown_text))
     quality_flags: list[str] = []
+    reason_codes: list[str] = []
     schema_valid = filled_sections == len(CANONICAL_SECTIONS)
     if not schema_valid:
         quality_flags.append("missing_sections")
+        reason_codes.append("missing_sections")
     if evidence_count == 0 and seat_id in SEARCH_SEAT_IDS:
         quality_flags.append("search_without_evidence")
+        reason_codes.append("search_without_real_evidence")
     if anchor_hits < 2:
         quality_flags.append("low_grounding")
     for marker in POLLUTION_MARKERS:
         if marker in markdown_text:
             quality_flags.append("polluted_output")
+            reason_codes.append("polluted_output")
             break
     quality_score = round(
         section_completeness * 10
@@ -163,6 +167,7 @@ def _build_quality_assessment(seat_id: str, markdown_text: str) -> QualityAssess
         section_completeness=round(section_completeness, 3),
         quality_score=quality_score,
         quality_flags=quality_flags,
+        reason_codes=sorted(set(reason_codes)),
     )
 
 
@@ -279,8 +284,48 @@ def _write_regression_cases(*, run_dir: Path, output_dir: Path, cases: list[Regr
     return paths
 
 
+def _load_events(run_dir: Path) -> list[dict[str, Any]]:
+    events_path = run_dir / "events.jsonl"
+    if not events_path.exists():
+        return []
+    events: list[dict[str, Any]] = []
+    for line in events_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if not line.strip():
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return events
+
+
 def load_truth_audit(path: Path) -> RunTruthAudit:
-    return RunTruthAudit(**_read_json(path.expanduser().resolve()))
+    payload = _read_json(path.expanduser().resolve())
+    payload.setdefault("audit_status", "success")
+    payload.setdefault("reason_codes", [])
+    return RunTruthAudit(**payload)
+
+
+def _compute_audit_status(reason_codes: set[str], fake_success_flags: list[str], degraded_chain_ids: list[str]) -> str:
+    fail_reasons = {"missing_final_draft", "fusion_parse_failure", "topology_mismatch", "stale_running_status"}
+    degraded_reasons = {
+        "search_without_real_evidence",
+        "polluted_output",
+        "schema_failure",
+        "timeout_partial_only",
+        "hidden_fallback",
+    }
+    review_reasons = {"missing_sections"}
+
+    if reason_codes & fail_reasons:
+        return "fail"
+    if reason_codes & degraded_reasons:
+        return "degraded"
+    if reason_codes & review_reasons:
+        return "needs-review"
+    if fake_success_flags or degraded_chain_ids:
+        return "degraded"
+    return "success"
 
 
 def audit_council_run(
@@ -299,8 +344,13 @@ def audit_council_run(
     degraded_chain_ids: list[str] = []
     fake_success_flags: list[str] = []
     repair_candidates: list[str] = []
+    reason_codes: set[str] = set()
     analysis_root = run_dir / "analysis"
     analysis_root.mkdir(parents=True, exist_ok=True)
+    status_payload = _load_status(run_dir)
+    events = _load_events(run_dir)
+    event_kinds = {event.get("kind", "") for event in events}
+    fusion_fallback_logged = "fusion-step-fallback" in event_kinds
 
     search_expected = 0
     search_with_evidence = 0
@@ -336,6 +386,7 @@ def audit_council_run(
                 seat_valid_count += 1
             if "polluted_output" in quality.quality_flags:
                 fake_success_flags.append(f"polluted_output:{seat_id}")
+                reason_codes.add("polluted_output")
                 cases.append(
                     _build_regression_case(
                         failure_type="tool_log_pollution",
@@ -350,13 +401,16 @@ def audit_council_run(
                 )
             if "missing_sections" in quality.quality_flags:
                 degraded_chain_ids.append(seat_id)
+                reason_codes.add("missing_sections")
                 repair_candidates.append(f"{seat_id}: 强化结构化输出，保证 10 个 canonical sections 完整。")
         else:
             degraded_chain_ids.append(seat_id)
             repair_candidates.append(f"{seat_id}: 修复失败 seat 的稳定性，并保留完整留痕。")
+            seat_failure_type = "schema_failure" if markdown_text else "timeout_partial_only"
+            reason_codes.add(seat_failure_type)
             cases.append(
                 _build_regression_case(
-                    failure_type="schema_failure" if markdown_text else "timeout_partial_only",
+                    failure_type=seat_failure_type,
                     run_id=summary["run_id"],
                     source_system=source_system,
                     brief_text=brief_text,
@@ -397,8 +451,9 @@ def audit_council_run(
     artifact_integrity_score = round(100 * sum(1 for path in artifact_files if path.exists() and path.stat().st_size > 0) / len(artifact_files))
 
     final_draft_text = _read_text(output_dir / "90-final-solution-draft.md")
-    if summary.get("status") == "success" and not final_draft_text.strip():
+    if not final_draft_text.strip():
         fake_success_flags.append("missing_final_draft")
+        reason_codes.add("missing_final_draft")
     if discussion_diversity_score < 20:
         fake_success_flags.append("high_homogeneity")
         cases.append(
@@ -415,6 +470,7 @@ def audit_council_run(
         )
     if evidence_integrity_score < 50 and search_expected > 0:
         fake_success_flags.append("search_without_real_evidence")
+        reason_codes.add("search_without_real_evidence")
         cases.append(
             _build_regression_case(
                 failure_type="search_failure",
@@ -430,11 +486,47 @@ def audit_council_run(
     if fusion_integrity_score < 100:
         degraded_chain_ids.append("fusion")
         repair_candidates.append("fusion: 补齐 idea-map、debate、final-decisions、final-draft 全链路产物。")
+    if status_payload.get("status") == "running":
+        reason_codes.add("stale_running_status")
+        cases.append(
+            _build_regression_case(
+                failure_type="stale_running_status",
+                run_id=summary["run_id"],
+                source_system=source_system,
+                brief_text=brief_text,
+                offending_outputs=[str(run_dir / "status.json")],
+                expected_behavior="run 结束后 status.json 不得继续停留在 running。",
+                repair_hypothesis="任何 fusion 或 audit 异常都必须显式收尾并写入 failed/degraded 状态。",
+                verification_command=verification_command,
+            )
+        )
+    non_terminal_seats = [
+        seat_id
+        for seat_id, seat_status in status_payload.get("seat_statuses", {}).items()
+        if seat_status not in {"success", "failed"}
+    ]
+    terminal_seat_count = sum(
+        1 for seat_status in status_payload.get("seat_statuses", {}).values() if seat_status in {"success", "failed"}
+    )
+    if non_terminal_seats or terminal_seat_count != expected_seat_count:
+        reason_codes.add("topology_mismatch")
+    if list((run_dir / "fusion").glob("*.claude.stdout.log")) and not fusion_fallback_logged:
+        reason_codes.add("hidden_fallback")
+    fusion_dir = run_dir / "fusion"
+    fusion_stage_logs = list(fusion_dir.glob("final-decisions*.log")) + list(fusion_dir.glob("final-draft*.log"))
+    missing_fusion_outputs = not (output_dir / "50-fusion-decisions.md").exists() or not final_draft_text.strip()
+    if (
+        summary.get("error")
+        and ("json" in str(summary.get("error", "")).lower() or "fusion" in str(summary.get("error", "")).lower())
+    ) or (fusion_stage_logs and missing_fusion_outputs):
+        reason_codes.add("fusion_parse_failure")
 
     regression_case_paths = _write_regression_cases(run_dir=run_dir, output_dir=output_dir, cases=cases)
+    audit_status = _compute_audit_status(reason_codes, fake_success_flags, degraded_chain_ids)
     audit = RunTruthAudit(
         run_id=summary["run_id"],
         mode=_mode_from_manifest(manifest),
+        audit_status=audit_status,
         seat_integrity_score=seat_integrity_score,
         discussion_diversity_score=discussion_diversity_score,
         evidence_integrity_score=evidence_integrity_score,
@@ -442,6 +534,7 @@ def audit_council_run(
         artifact_integrity_score=artifact_integrity_score,
         fake_success_flags=sorted(set(fake_success_flags)),
         degraded_chain_ids=sorted(set(degraded_chain_ids)),
+        reason_codes=sorted(reason_codes),
         regression_case_paths=regression_case_paths,
         repair_candidates=sorted(set(repair_candidates)),
     )
@@ -508,6 +601,8 @@ def build_benchmark_measurement(summary: dict[str, Any], *, audit: RunTruthAudit
         latency_ms=_latency_ms(status),
         provider_calls=provider_calls,
         estimated_cost=_estimate_cost(provider_calls, _mode_from_manifest(manifest)),
+        audit_pass_success_rate=1.0 if loaded_audit.audit_status == "success" else 0.0,
+        cost_per_audited_success=_estimate_cost(provider_calls, _mode_from_manifest(manifest)) if loaded_audit.audit_status == "success" else 0.0,
         schema_pass_rate=round(loaded_audit.seat_integrity_score / 100, 3),
         evidence_coverage=round(loaded_audit.evidence_integrity_score / 100, 3),
         quality_score=round(
@@ -545,12 +640,13 @@ def render_benchmark_report_markdown(report: BenchmarkReport) -> str:
         "",
         "# Benchmark Report",
         "",
-        "| 模式 | run_id | latency_ms | provider_calls | estimated_cost | schema_pass_rate | evidence_coverage | quality_score | issue_ready | failed_rate | fake_success_rate |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| 模式 | run_id | latency_ms | provider_calls | estimated_cost | audit_pass_success_rate | cost_per_audited_success | schema_pass_rate | evidence_coverage | quality_score | issue_ready | failed_rate | fake_success_rate |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for item in report.measurements:
         lines.append(
             f"| {item.mode} | `{item.run_id}` | {item.latency_ms} | {item.provider_calls} | {item.estimated_cost} | "
+            f"{item.audit_pass_success_rate:.2f} | {item.cost_per_audited_success:.2f} | "
             f"{item.schema_pass_rate:.2f} | {item.evidence_coverage:.2f} | {item.quality_score:.2f} | {item.issue_readiness_score:.2f} | "
             f"{item.failed_rate:.2f} | {item.fake_success_rate:.2f} |"
         )

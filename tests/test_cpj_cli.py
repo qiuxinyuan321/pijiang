@@ -272,4 +272,4 @@ def test_cpj_run_refuses_placeholder_config_without_allow_degraded(tmp_path: Pat
     exit_code = main(["run", "--config", str(config_path), "--brief", str(brief_path), "--topic", "测试议题", "--yes"])
     captured = capsys.readouterr()
     assert exit_code == 2
-    assert "当前配置存在 blocker" in captured.err
+    assert "provider preflight blocker" in captured.err

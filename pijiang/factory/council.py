@@ -335,7 +335,7 @@ class CouncilRunTracker:
     def complete(self, status: str, message: str) -> None:
         with self.lock:
             self.state["status"] = status
-            self.state["stage"] = "completed" if status == "success" else "failed"
+            self.state["stage"] = "completed" if status in {"success", "degraded", "needs-review"} else "failed"
             self.state["finished_at"] = utc_now_iso()
             self.state["current_message"] = message
             self.state["current_seat_id"] = ""
@@ -872,12 +872,18 @@ class CouncilEngine:
             "seat_count": len(seats),
             "topic": topic,
         }
+        tracker.complete("success", "议会运行完成，正在执行 truth audit")
         audit = audit_council_run(summary)
         summary["truth_audit_path"] = str(output_dir / "70-run-truth-audit.json")
         summary["fake_success_flag_count"] = len(audit.fake_success_flags)
         summary["regression_case_count"] = len(audit.regression_case_paths)
+        summary["audit_status"] = audit.audit_status
+        summary["reason_codes"] = audit.reason_codes
+        if audit.audit_status != "success":
+            summary["status"] = audit.audit_status
         tracker.add_artifact("truth_audit", summary["truth_audit_path"])
         tracker.add_artifact("regression_cases_index", str(output_dir / "80-regression-cases-index.md"))
-        tracker.complete("success", "议会运行完成")
+        if summary["status"] != "success":
+            tracker.complete(summary["status"], f"议会运行完成，状态为 {summary['status']}")
         write_json(run_dir / "summary.json", summary)
         return summary

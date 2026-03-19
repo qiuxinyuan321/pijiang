@@ -22,6 +22,15 @@
 - Obsidian 作为强推荐默认可视化层
 - 单一路径发布基线优先
 
+同时明确区分：
+
+- `display default`
+  - 当前文档展示默认是 `standard10`
+- `evaluation profile`
+  - 当前内部评估会用 `single / reduced6 / standard10`
+- `recommended config`
+  - 只有通过 benchmark + truth audit 稳定验证后，才会获得推荐资格
+
 如果某项能力不服务这条主线，它就不会抢 `Phase A+` 优先级。
 
 ## Provider Matrix

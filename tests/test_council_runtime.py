@@ -232,13 +232,16 @@ def test_council_run_writes_truth_audit_and_regression_case(tmp_path: Path) -> N
         env={"PIJIANG_FAKE_BAD_LANE": "planning"},
     )
 
-    assert summary["status"] == "success"
+    assert summary["status"] == "degraded"
+    assert summary["audit_status"] == "degraded"
     assert summary["failed_lane_count"] == 1
     assert summary["truth_audit_path"]
     assert summary["regression_case_count"] >= 1
+    assert "schema_failure" in summary["reason_codes"]
 
     audit = load_truth_audit(Path(summary["truth_audit_path"]))
     assert audit.run_id == summary["run_id"]
+    assert audit.audit_status == "degraded"
     assert "planning" in audit.degraded_chain_ids
     assert Path(summary["obsidian_output_dir"]).joinpath("80-regression-cases-index.md").exists()
 
@@ -268,3 +271,4 @@ def test_build_benchmark_report_from_completed_runs(tmp_path: Path) -> None:
 
     assert [item.mode for item in report.measurements] == ["single", "reduced6", "standard10"]
     assert all(item.truth_audit_path for item in report.measurements)
+    assert all(hasattr(item, "audit_pass_success_rate") for item in report.measurements)

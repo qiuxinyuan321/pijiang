@@ -75,6 +75,18 @@
 
 完整图解和更细的说明放在 [docs/demo-visuals.md](docs/demo-visuals.md)。
 
+这里需要明确三个不同概念：
+
+- `display default`
+  - 当前首页默认展示 `standard10`
+  - 目的是保持统一演示面与文档一致性
+- `evaluation profile`
+  - 当前内部评估固定比较 `single / reduced6 / standard10`
+  - 用来回答 10 席值不值，不直接等于推荐配置
+- `recommended config`
+  - 只有当同 case set 的 benchmark + truth audit 连续稳定后，才会获得推荐资格
+  - 当前 README 不把 `standard10` 写成“推荐最优”
+
 <details>
 <summary>展开 10 席完整说明</summary>
 
@@ -100,10 +112,10 @@
 | 信号 | 当前状态 | 去哪里看 |
 | --- | --- | --- |
 | `cpj init / doctor / demo / run` 主链路 | 已固化 | [docs/first-success-path.md](docs/first-success-path.md) |
-| `single / reduced6 / standard10` benchmark gate | 已完成 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
+| `single / reduced6 / standard10` benchmark gate | 已完成，当前用于评估而非宣称最优 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
 | run 后 `truth audit` | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
 | `regression cases` 留痕 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
-| 官方支持边界 | 已整理 | [docs/support-matrix.md](docs/support-matrix.md) |
+| provider preflight 与支持边界 | 已整理 | [docs/support-matrix.md](docs/support-matrix.md) |
 
 这部分故意只写“已经证实的东西”。下面这些能力仍然保留，但**不会**在首页宣称已经完整生效：
 
@@ -348,7 +360,7 @@ obsidian-vault/
 
 - 把 `cpj init / doctor / demo / run` 做成稳定主线
 - 让陌生用户下载后先看到价值，再接真实 provider
-- 把 runtime 回流能力、truth audit 和 regression cases 稳定下来
+- 把 runtime 回流能力、truth audit、reason codes 和 regression cases 稳定下来
 - 把 GitHub 首页从“长文档”重构成“产品首页 + 文档路由器”
 
 ## 当前官方主线
