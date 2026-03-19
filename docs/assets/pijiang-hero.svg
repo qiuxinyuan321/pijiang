@@ -1,0 +1,74 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">皮匠 GitHub 首页主视觉</title>
+  <desc id="desc">展示皮匠的 10 席议会、多模型职责分工、demo-first 路径和 truth audit 能力。</desc>
+  <defs>
+    <linearGradient id="bg" x1="88" y1="56" x2="1192" y2="664" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F3E8"/>
+      <stop offset="1" stop-color="#EFE4D0"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#C97D42"/>
+      <stop offset="1" stop-color="#9D4E2E"/>
+    </linearGradient>
+    <filter id="shadow" x="40" y="24" width="1200" height="672" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feOffset dy="10"/>
+      <feGaussianBlur stdDeviation="16"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.278431 0 0 0 0 0.2 0 0 0 0 0.141176 0 0 0 0.12 0"/>
+      <feBlend in2="SourceGraphic" result="shape"/>
+    </filter>
+  </defs>
+
+  <rect x="72" y="44" width="1136" height="632" rx="30" fill="url(#bg)" stroke="#D9C9AE" filter="url(#shadow)"/>
+  <rect x="108" y="92" width="176" height="38" rx="19" fill="#1F140F"/>
+  <text x="196" y="116" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#F6E8D5">多模型议会能力层</text>
+
+  <text x="112" y="192" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="64" font-weight="800" fill="#1F140F">皮匠</text>
+  <text x="112" y="236" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26" font-weight="600" fill="#6A3E26">不是单模型扮演多个角色，而是多个真实模型位承担分析职责。</text>
+  <text x="112" y="278" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24" font-weight="500" fill="#51372B">把复杂议题压成可执行方案链：发散 -> 对抗 -> 整合 -> 收敛</text>
+
+  <rect x="112" y="322" width="184" height="42" rx="21" fill="#FFF8EF" stroke="#D7C2A2"/>
+  <text x="204" y="349" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8B4A2C">10 席完整议会</text>
+  <rect x="312" y="322" width="184" height="42" rx="21" fill="#FFF8EF" stroke="#D7C2A2"/>
+  <text x="404" y="349" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8B4A2C">demo-first</text>
+  <rect x="512" y="322" width="184" height="42" rx="21" fill="#FFF8EF" stroke="#D7C2A2"/>
+  <text x="604" y="349" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8B4A2C">truth audit</text>
+
+  <rect x="748" y="108" width="392" height="184" rx="24" fill="#FFF8EF" stroke="#D8C4A7"/>
+  <text x="784" y="150" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#1F140F">职责不是人格，席位不是扮演</text>
+  <rect x="784" y="174" width="106" height="34" rx="17" fill="#F3E1CA"/>
+  <text x="837" y="196" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">controller</text>
+  <rect x="902" y="174" width="102" height="34" rx="17" fill="#F3E1CA"/>
+  <text x="953" y="196" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">planning</text>
+  <rect x="1016" y="174" width="88" height="34" rx="17" fill="#F3E1CA"/>
+  <text x="1060" y="196" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">fusion</text>
+  <rect x="784" y="222" width="152" height="34" rx="17" fill="#FAEBD8"/>
+  <text x="860" y="244" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">search-1 / search-2</text>
+  <rect x="950" y="222" width="154" height="34" rx="17" fill="#FAEBD8"/>
+  <text x="1027" y="244" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">marshal-1 / 2 / 3</text>
+  <rect x="784" y="270" width="132" height="34" rx="17" fill="#FCEFDA"/>
+  <text x="850" y="292" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">chaos</text>
+  <rect x="930" y="270" width="132" height="34" rx="17" fill="#FCEFDA"/>
+  <text x="996" y="292" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">skeptic</text>
+
+  <rect x="112" y="412" width="322" height="176" rx="24" fill="#FFF8EF" stroke="#D8C4A7"/>
+  <text x="146" y="452" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#1F140F">多路产物链</text>
+  <text x="146" y="492" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">brief -> variants -> idea-map</text>
+  <text x="146" y="526" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">debate-rounds -> fusion-decisions</text>
+  <text x="146" y="560" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">final-solution-draft</text>
+  <text x="146" y="598" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#5F4A3D">不是只吐一段答案，而是留下完整可复盘链路。</text>
+
+  <rect x="478" y="412" width="322" height="176" rx="24" fill="#FFF8EF" stroke="#D8C4A7"/>
+  <text x="512" y="452" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#1F140F">运行后审计</text>
+  <text x="512" y="492" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">status.json 持续可见</text>
+  <text x="512" y="526" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">70-run-truth-audit.json</text>
+  <text x="512" y="560" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">regression-cases / quality gate</text>
+  <text x="512" y="598" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#5F4A3D">有退化就留痕，不用“看起来成功”掩盖真实问题。</text>
+
+  <rect x="844" y="412" width="296" height="176" rx="24" fill="#1F140F"/>
+  <text x="878" y="452" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#F6E8D5">首次成功路径</text>
+  <rect x="878" y="480" width="228" height="34" rx="17" fill="url(#accent)"/>
+  <text x="992" y="502" text-anchor="middle" font-family="Consolas, Segoe UI, monospace" font-size="15" font-weight="700" fill="#FFF7F0">cpj init -> cpj doctor</text>
+  <rect x="878" y="526" width="228" height="34" rx="17" fill="#6A3E26"/>
+  <text x="992" y="548" text-anchor="middle" font-family="Consolas, Segoe UI, monospace" font-size="15" font-weight="700" fill="#FFF7F0">cpj demo -> cpj run</text>
+  <text x="878" y="594" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#F4DDC9">先看到价值，再接真实 provider，避免新用户一上来就撞配置墙。</text>
+</svg>
