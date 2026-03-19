@@ -140,6 +140,9 @@ class RunProgressSnapshot:
     completed_seat_count: int
     failed_seat_count: int
     current_message: str
+    running_seat_ids: list[str] = field(default_factory=list)
+    current_seat_id: str = ""
+    updated_at: str = ""
     artifacts: dict[str, str] = field(default_factory=dict)
 
 
@@ -202,6 +205,7 @@ class SeatResult:
     seat_id: str
     seat_type: str
     summary: str
+    sections: dict[str, str] = field(default_factory=dict)
     claims: list[dict[str, Any]] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
     risks: list[str] = field(default_factory=list)
@@ -220,6 +224,7 @@ class QualityAssessment:
     section_completeness: float
     quality_score: int
     quality_flags: list[str] = field(default_factory=list)
+    reason_codes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -247,6 +252,8 @@ class BenchmarkMeasurement:
     latency_ms: int
     provider_calls: int
     estimated_cost: float
+    audit_pass_success_rate: float
+    cost_per_audited_success: float
     schema_pass_rate: float
     evidence_coverage: float
     quality_score: float
@@ -268,6 +275,7 @@ class BenchmarkReport:
 class RunTruthAudit:
     run_id: str
     mode: str
+    audit_status: str
     seat_integrity_score: int
     discussion_diversity_score: int
     evidence_integrity_score: int
@@ -275,6 +283,7 @@ class RunTruthAudit:
     artifact_integrity_score: int
     fake_success_flags: list[str] = field(default_factory=list)
     degraded_chain_ids: list[str] = field(default_factory=list)
+    reason_codes: list[str] = field(default_factory=list)
     regression_case_paths: list[str] = field(default_factory=list)
     repair_candidates: list[str] = field(default_factory=list)
 

@@ -10,6 +10,7 @@ from .types import (
     ControllerPolicy,
     CouncilSeat,
     CouncilTopology,
+    ExecutionPolicy,
     ProviderCapabilities,
     ProviderProfile,
     VisualizationProfile,
@@ -39,6 +40,7 @@ class PijiangConfig:
     council_topology: CouncilTopology | None = None
     controller_policy: ControllerPolicy | None = None
     workflow: WorkflowProfile | None = None
+    execution_policy: ExecutionPolicy = field(default_factory=ExecutionPolicy)
     visualization: VisualizationProfile = field(default_factory=VisualizationProfile)
     onboarding: OnboardingState = field(default_factory=OnboardingState)
 
@@ -315,6 +317,7 @@ def build_default_config(
         council_topology=topology,
         controller_policy=controller_policy,
         workflow=workflow,
+        execution_policy=ExecutionPolicy(),
         visualization=visualization,
         onboarding=OnboardingState(),
     )
@@ -377,6 +380,10 @@ def _visualization_from_dict(payload: dict[str, Any] | None) -> VisualizationPro
     return VisualizationProfile(**(payload or {}))
 
 
+def _execution_policy_from_dict(payload: dict[str, Any] | None) -> ExecutionPolicy:
+    return ExecutionPolicy(**(payload or {}))
+
+
 def _onboarding_from_dict(payload: dict[str, Any] | None) -> OnboardingState:
     return OnboardingState(**(payload or {}))
 
@@ -395,6 +402,7 @@ def load_config(path: Path | None = None) -> PijiangConfig:
         council_topology=_topology_from_dict(payload["council_topology"]) if payload.get("council_topology") else None,
         controller_policy=_controller_policy_from_dict(payload.get("controller_policy")),
         workflow=_workflow_from_dict(payload.get("workflow")),
+        execution_policy=_execution_policy_from_dict(payload.get("execution_policy")),
         visualization=_visualization_from_dict(payload.get("visualization")),
         onboarding=_onboarding_from_dict(payload.get("onboarding")),
     )

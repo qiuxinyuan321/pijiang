@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -44,8 +45,18 @@ def extract_marker(prompt: str, marker: str, fallback: str) -> str:
 
 def build_body(stage: str, lane: str) -> str:
     if stage == "variant":
+        if os.environ.get("PIJIANG_FAKE_BAD_LANE", "").strip() == lane:
+            return "bad output without canonical headings"
+        evidence = ""
+        if lane in {"search-1", "search-2"}:
+            evidence = (
+                "- 证据：https://example.com/pijiang/search-evidence\\n"
+                "- 证据：https://github.com/example/pijiang-search-case\\n"
+                "- 证据：https://example.com/pijiang/search-benchmark\\n\\n"
+            )
         return (
             f"# 问题定义\\n{lane} 输出\\n\\n"
+            f"{evidence}"
             "# 目标与非目标\\n验证 cpj 主链路\\n\\n"
             "# 用户/场景\\n仓库自测\\n\\n"
             "# 系统架构\\n10 席议会\\n\\n"
@@ -237,6 +248,7 @@ def test_cpj_run_executes_full_council_with_command_bridge_profiles(tmp_path: Pa
     run_dir = runs[0]
     assert (run_dir / "status.json").exists()
     assert (run_dir / "events.jsonl").exists()
+    assert (run_dir / "summary.json").exists()
 
     output_root = Path(config.visualization.vault_path) / config.project_prefix / "测试议题" / "方案工厂"
     output_dirs = list(output_root.iterdir())
@@ -248,6 +260,8 @@ def test_cpj_run_executes_full_council_with_command_bridge_profiles(tmp_path: Pa
     assert (output_dir / "30-idea-map.md").exists()
     assert (output_dir / "50-fusion-decisions.md").exists()
     assert (output_dir / "90-final-solution-draft.md").exists()
+    assert (output_dir / "70-run-truth-audit.json").exists()
+    assert (output_dir / "80-regression-cases-index.md").exists()
 
 
 def test_cpj_run_refuses_placeholder_config_without_allow_degraded(tmp_path: Path, capsys) -> None:
@@ -258,4 +272,4 @@ def test_cpj_run_refuses_placeholder_config_without_allow_degraded(tmp_path: Pat
     exit_code = main(["run", "--config", str(config_path), "--brief", str(brief_path), "--topic", "测试议题", "--yes"])
     captured = capsys.readouterr()
     assert exit_code == 2
-    assert "当前配置存在 blocker" in captured.err
+    assert "provider preflight blocker" in captured.err
