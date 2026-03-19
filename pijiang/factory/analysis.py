@@ -197,6 +197,7 @@ def _build_seat_result(seat_id: str, seat_type: str, markdown_text: str) -> Seat
         seat_id=seat_id,
         seat_type=seat_type,
         summary=_first_sentence(sections.get("问题定义", "") or markdown_text),
+        sections=sections,
         claims=claims,
         recommendations=_list_lines(sections.get("关键流程", "") + "\n" + sections.get("里程碑", ""))[:8],
         risks=_list_lines(sections.get("风险与取舍", ""))[:8],

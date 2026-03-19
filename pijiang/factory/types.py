@@ -205,6 +205,7 @@ class SeatResult:
     seat_id: str
     seat_type: str
     summary: str
+    sections: dict[str, str] = field(default_factory=dict)
     claims: list[dict[str, Any]] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
     risks: list[str] = field(default_factory=list)

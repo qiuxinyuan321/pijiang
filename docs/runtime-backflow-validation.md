@@ -106,3 +106,29 @@
 - budget / circuit breaker / fallback replacement
 - 本地议会的字节级 subprocess streaming
 - 任何未经过 benchmark gate 的前沿试验能力
+
+## 本地议会正在继续推进、但尚未完整回流的方向
+
+当前本地议会已经进入“自省强化 + seat schema-first”阶段，但这部分仍然优先留在本地实验场：
+
+- 本地自省 cycle
+  - 最新 cycle:
+    - `iter-20260319-130615`
+  - 说明：
+    - 已固定产出 `00-meta-brief.md / 60-delta-report.md / 70-run-truth-audit.json / 90-next-iteration-brief.md`
+    - 这套机制目前仍属于本地议会内部能力，不作为 `cpj` 的公开主命令
+- seat schema-first
+  - 本地议会已经开始把 variant 输出往 `SeatResult JSON -> Markdown` 迁移
+  - 当前真实验证结果：
+    - `sf-20260319-130615-30340` / `failed_lane_count = 9`
+    - `sf-20260319-151806-111592` / `failed_lane_count = 7`
+  - 结论：
+    - 真实 10 路 seat 稳定性有改善，但主 reason code 仍集中在 `schema_failure`
+    - 因此这一层还不应整体回流到 `皮匠` 运行器，只同步稳定契约字段
+
+当前已经同步到 `皮匠` 的，只是这部分实验的稳定表达层：
+
+- `RunTruthAudit.audit_status`
+- `RunTruthAudit.reason_codes`
+- `QualityAssessment.reason_codes`
+- 文档中的 `display default / evaluation profile / recommended config` 口径纪律
