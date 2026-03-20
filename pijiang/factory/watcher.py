@@ -31,8 +31,15 @@ def _latest_mtime(path: Path | None) -> float:
         return 0.0
     if path.is_file():
         return path.stat().st_mtime
-    latest = path.stat().st_mtime
-    for child in path.rglob("*"):
+    try:
+        latest = path.stat().st_mtime
+    except OSError:
+        return 0.0
+    try:
+        children = list(path.rglob("*"))
+    except OSError:
+        return latest
+    for child in children:
         try:
             child_mtime = child.stat().st_mtime
         except OSError:

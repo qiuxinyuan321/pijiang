@@ -4,6 +4,7 @@ import argparse
 import concurrent.futures
 import json
 import os
+import os.path
 import re
 import shutil
 import subprocess
@@ -14,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pijiang.factory.runtime_support import trim_to_canonical_markdown, variant_quality_issue
 from pijiang.factory.types import WatcherPolicy
 from pijiang.factory.watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, watcher_enabled
 from tools.workspace_paths import REPO_ROOT, get_workspace_drive_root, get_workspace_name, get_workspace_root
@@ -389,6 +391,39 @@ def get_user_environment_variable(name: str) -> str:
         return ""
 
 
+_SEMVER_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+def _semver_key(value: str) -> tuple[int, int, int]:
+    matched = _SEMVER_RE.search(value)
+    if not matched:
+        return (0, 0, 0)
+    return tuple(int(part) for part in matched.groups())
+
+
+def _find_bun_cached_opencode() -> Path | None:
+    if os.name != "nt":
+        return None
+    bun_root = Path.home() / ".bun" / "install" / "cache"
+    if not bun_root.exists():
+        return None
+    candidates: list[Path] = []
+    for directory in bun_root.glob("opencode-windows-x64@*"):
+        executable = directory / "bin" / "opencode.exe"
+        if executable.exists():
+            candidates.append(executable)
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda item: (
+            _semver_key(item.parent.parent.name),
+            item.stat().st_mtime,
+        ),
+        reverse=True,
+    )
+    return candidates[0]
+
+
 def resolve_command_prefix(
     family: str,
     *,
@@ -412,9 +447,17 @@ def resolve_command_prefix(
         resolved = shutil.which("opencode")
         if resolved:
             return [resolved]
+        env_override = first_env("PIJIANG_OPENCODE_PATH", "OPENCODE_PATH")
+        if env_override:
+            override_path = Path(env_override).expanduser()
+            if override_path.exists():
+                return [str(override_path)]
         local_binary = workspace_root / "opencode-src" / "packages" / "opencode" / "node_modules" / "opencode-windows-x64" / "bin" / "opencode.exe"
         if local_binary.exists():
             return [str(local_binary)]
+        bun_cached = _find_bun_cached_opencode()
+        if bun_cached is not None:
+            return [str(bun_cached)]
         local_bin = workspace_root / "opencode-src" / "packages" / "opencode" / "bin" / "opencode"
         bun_path = shutil.which("bun")
         if bun_path and local_bin.exists():
@@ -494,7 +537,6 @@ def build_lane_command(
         return PreparedCommand(command=command, cwd=workspace_root, stdin_text=prompt_text)
 
     if lane.family == "claude":
-        prompt_argument = prompt_text or ""
         command = prefix + [
             "-p",
             "--output-format",
@@ -508,8 +550,7 @@ def build_lane_command(
         ]
         if claude_effort:
             command.extend(["--effort", claude_effort])
-        command.append(prompt_argument)
-        return PreparedCommand(command=command, cwd=workspace_root, stdin_text=None)
+        return PreparedCommand(command=command, cwd=workspace_root, stdin_text=prompt_text or "")
 
     if lane.family == "opencode":
         env: dict[str, str] = build_opencode_runtime_env(opencode_runtime_root)
@@ -528,7 +569,9 @@ def build_lane_command(
         ]
         if opencode_variant:
             command.extend(["--variant", opencode_variant])
-        return PreparedCommand(command=command, cwd=workspace_root, env=env, stdin_text=prompt_text)
+        if prompt_text:
+            command.append(prompt_text)
+        return PreparedCommand(command=command, cwd=workspace_root, env=env, stdin_text=None)
 
     raise ValueError(f"unsupported lane family: {lane.family}")
 
@@ -599,8 +642,7 @@ def build_claude_fusion_command(
         command.extend(["--effort", claude_effort])
     if json_schema is not None:
         command.extend(["--json-schema", json.dumps(json_schema, ensure_ascii=False)])
-    command.append(prompt_text)
-    return PreparedCommand(command=command, cwd=workspace_root, stdin_text=None)
+    return PreparedCommand(command=command, cwd=workspace_root, stdin_text=prompt_text)
 
 
 def parse_opencode_event_stream(stdout_text: str) -> str:
@@ -1336,6 +1378,10 @@ class SolutionFactory:
                 ).strip()
                 if not raw_output:
                     raise RuntimeError("command completed without a usable final message")
+                raw_output = trim_to_canonical_markdown(raw_output)
+                quality_issue = variant_quality_issue(lane, raw_output)
+                if quality_issue:
+                    raise RuntimeError(f"quality gate failed: {quality_issue}")
 
                 raw_output_path = lane_run_dir / "raw-output.txt"
                 write_text(raw_output_path, raw_output)

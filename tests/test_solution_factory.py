@@ -217,6 +217,7 @@ def test_preflight_degrades_standard10_to_reduced6_when_opencode_missing(monkeyp
         return None
 
     monkeypatch.setattr(solution_factory_core.shutil, "which", fake_which)
+    monkeypatch.setattr(solution_factory_core, "_find_bun_cached_opencode", lambda: None)
 
     config = SolutionFactoryConfig(
         workspace_root=tmp_path / "workspace",
@@ -235,6 +236,26 @@ def test_preflight_degrades_standard10_to_reduced6_when_opencode_missing(monkeyp
     assert [lane.id for lane in effective_lanes] == [lane.id for lane in DEFAULT_LANES[:6]]
     assert "opencode-kimi" in preflight["unavailable_lane_ids"]
     assert any(issue["code"] == "profile_degraded" for issue in preflight["issues"])
+
+
+def test_resolve_command_prefix_finds_bun_cached_opencode(monkeypatch, tmp_path: Path) -> None:
+    bun_cache_root = tmp_path / ".bun" / "install" / "cache"
+    older = bun_cache_root / "opencode-windows-x64@1.2.3@@registry.npm@@@1" / "bin"
+    newer = bun_cache_root / "opencode-windows-x64@1.2.27@@registry.npm@@@1" / "bin"
+    older.mkdir(parents=True, exist_ok=True)
+    newer.mkdir(parents=True, exist_ok=True)
+    older_exe = older / "opencode.exe"
+    newer_exe = newer / "opencode.exe"
+    older_exe.write_text("", encoding="utf-8")
+    newer_exe.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(solution_factory_core, "first_env", lambda *names: "")
+    monkeypatch.setattr(solution_factory_core.shutil, "which", lambda name: None)
+    monkeypatch.setattr(solution_factory_core.Path, "home", classmethod(lambda cls: tmp_path))
+
+    resolved = solution_factory_core.resolve_command_prefix("opencode", workspace_root=tmp_path / "workspace")
+
+    assert resolved == [str(newer_exe)]
 
 
 def test_solution_factory_watcher_emits_alert_for_slow_lane(tmp_path: Path) -> None:
