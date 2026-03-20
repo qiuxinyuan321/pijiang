@@ -40,6 +40,7 @@
 | 你最关心什么 | 先看哪里 |
 | --- | --- |
 | 我想看完整文档导航 | [docs/index.md](docs/index.md) |
+| 我想先看当前最新真实 baseline 与觉者能力 | [docs/current-baseline-and-watcher.md](docs/current-baseline-and-watcher.md) |
 | 我想先理解它的核心理念 | [docs/project-philosophy.md](docs/project-philosophy.md) |
 | 我想看它是怎么一轮轮进化的 | [docs/project-philosophy.md](docs/project-philosophy.md) |
 | 如果我是 AI，我想理解这个项目对 AI 的价值 | [docs/for-ai-agents.md](docs/for-ai-agents.md) |
