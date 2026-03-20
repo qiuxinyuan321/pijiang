@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -76,6 +78,54 @@ def _message_content(payload: dict[str, Any]) -> str:
                 parts.append(str(item.get("text", "")))
         return "\n".join(parts).strip()
     return str(content).strip()
+
+
+def _parse_opencode_event_stream(stdout_text: str) -> str:
+    text_parts: list[str] = []
+    for raw_line in stdout_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        part = payload.get("part", {})
+        if payload.get("type") == "text" and isinstance(part, dict):
+            text = str(part.get("text", "")).strip()
+            if text:
+                text_parts.append(text)
+    return "\n\n".join(text_parts).strip()
+
+
+_SEMVER_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+def _semver_key(value: str) -> tuple[int, int, int]:
+    matched = _SEMVER_RE.search(value)
+    if not matched:
+        return (0, 0, 0)
+    return tuple(int(part) for part in matched.groups())
+
+
+def _resolve_opencode_command() -> list[str]:
+    explicit = os.environ.get("PIJIANG_OPENCODE_PATH", "").strip() or os.environ.get("OPENCODE_PATH", "").strip()
+    if explicit and Path(explicit).expanduser().exists():
+        return [str(Path(explicit).expanduser())]
+    resolved = shutil.which("opencode")
+    if resolved:
+        return [resolved]
+    bun_root = Path.home() / ".bun" / "install" / "cache"
+    candidates: list[Path] = []
+    if bun_root.exists():
+        for directory in bun_root.glob("opencode-windows-x64@*"):
+            executable = directory / "bin" / "opencode.exe"
+            if executable.exists():
+                candidates.append(executable)
+    if candidates:
+        candidates.sort(key=lambda item: (_semver_key(item.parent.parent.name), item.stat().st_mtime), reverse=True)
+        return [str(candidates[0])]
+    raise ProviderExecutionError("unable to resolve an opencode executable")
 
 
 @dataclass
@@ -205,6 +255,46 @@ class CommandBridgeAdapter(BaseProviderAdapter):
         )
 
 
+class OpencodeAdapter(BaseProviderAdapter):
+    def execute(self, request: ExecutionRequest) -> ExecutionResponse:
+        command = _resolve_opencode_command() + [
+            "run",
+            "--format",
+            "json",
+            "--dir",
+            str(Path.cwd()),
+            "--model",
+            self.profile.model,
+            "--variant",
+            "max",
+            request.prompt,
+        ]
+        completed = subprocess.run(
+            command,
+            text=True,
+            capture_output=True,
+            timeout=request.timeout_sec,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise ProviderExecutionError(
+                f"{self.profile.id} opencode failed with {completed.returncode}: {(completed.stderr or completed.stdout).strip()}"
+            )
+        content = _parse_opencode_event_stream(completed.stdout or "")
+        if not content:
+            raise ProviderExecutionError(f"{self.profile.id} opencode returned no final text content")
+        if request.schema is not None:
+            content = json.dumps(_extract_json_block(content), ensure_ascii=False)
+        return ExecutionResponse(
+            content=content,
+            raw_stdout=completed.stdout or "",
+            raw_stderr=completed.stderr or "",
+            provider_id=self.profile.id,
+            model=self.profile.model,
+            metadata={"transport": "opencode", "command": command},
+        )
+
+
 class DemoAdapter(BaseProviderAdapter):
     def execute(self, request: ExecutionRequest) -> ExecutionResponse:
         prompt = request.prompt
@@ -228,16 +318,16 @@ class DemoAdapter(BaseProviderAdapter):
                 f"{evidence_block}"
                 "# 目标与非目标\n演示皮匠安装后无需真实 API 也能看到完整链路。\n\n"
                 "# 用户/场景\n新用户首次安装后的 demo 体验。\n\n"
-                "# 系统架构\n10 席多模型议会 + Obsidian 可视化。\n\n"
+                "# 系统架构\n11 席公开议会 + Obsidian 可视化。\n\n"
                 "# 模块拆分\ncpj init / doctor / demo / run。\n\n"
-                "# 关键流程\ndemo 配置 -> 10 席产物 -> fusion -> 可视化。\n\n"
+                "# 关键流程\ndemo 配置 -> 11 席产物 -> final-synthesis -> 可视化。\n\n"
                 "# 技术选型\nPython + Markdown + Obsidian 模板。\n\n"
                 "# 风险与取舍\n演示模式不代表真实 provider 已配置完成。\n\n"
                 "# 里程碑\n先验证安装，再配置真实 provider。\n\n"
                 "# 待确认问题\n无。\n"
             )
         elif stage == "idea-map":
-            content = "# 共识点\n先让用户看到价值。\n\n# 独特亮点\n10 席完整议会。\n\n# 冲突点\n真实 provider 仍需单独配置。\n\n# 质疑焦点\n默认配置会不会误导可直接 real run。\n\n# 可组合点\ndemo + doctor + readiness。\n"
+            content = "# 共识点\n先让用户看到价值。\n\n# 独特亮点\n11 席公开议会。\n\n# 冲突点\n真实 provider 仍需单独配置。\n\n# 质疑焦点\n默认配置会不会误导可直接 real run。\n\n# 可组合点\ndemo + doctor + readiness。\n"
         elif stage.startswith("debate-round-"):
             content = f"# {stage}\n- 议题：先验证体验，再接真实 API。\n- 结论：demo 模式作为新手第一步。\n"
         elif stage == "final-decisions-json":
@@ -273,7 +363,7 @@ class DemoAdapter(BaseProviderAdapter):
                     "sections": [
                         {
                             "title": "demo-first",
-                            "content": "先通过 demo 看到 10 席拓扑与完整产物链，再进入真实 provider 配置。",
+                            "content": "先通过 demo 看到 11 席拓扑与完整产物链，再进入真实 provider 配置。",
                             "sources": [lane_id],
                             "rationale": "这样更适合新用户部署与验收。",
                             "status": "accepted",
@@ -430,6 +520,8 @@ def execute_profile_request(
 ) -> ExecutionResponse:
     if profile.adapter_type == "command_bridge":
         return _execute_command_bridge_request(profile, request, cancel_event=cancel_event)
+    if profile.adapter_type == "opencode":
+        return OpencodeAdapter(profile).execute(request)
     if profile.adapter_type in {"openai_compatible", "planning_api", "ollama"}:
         return _execute_http_request_in_worker(profile, request, cancel_event=cancel_event, worker_dir=worker_dir)
     return adapter_for_profile(profile).execute(request)
@@ -444,6 +536,8 @@ def adapter_for_profile(profile: ProviderProfile) -> BaseProviderAdapter:
         return OllamaAdapter(profile)
     if profile.adapter_type == "command_bridge":
         return CommandBridgeAdapter(profile)
+    if profile.adapter_type == "opencode":
+        return OpencodeAdapter(profile)
     if profile.adapter_type == "demo":
         return DemoAdapter(profile)
     raise ProviderExecutionError(f"unsupported adapter type: {profile.adapter_type}")

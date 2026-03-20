@@ -39,6 +39,7 @@ from .runtime_support import (
 
 from .config import PijiangConfig, active_seats, council_mode, find_provider, unique_active_profile_count
 from .providers import ProviderExecutionError, adapter_for_profile, execute_profile_request
+from .registry import OPENCODE_MARSHAL_SEAT_IDS, SEAT_REGISTRY_VERSION, STANDARD11_QUORUM_PROFILE
 from .types import CouncilSeat, ExecutionRequest, RunProgressSnapshot
 from .watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, watcher_enabled
 
@@ -46,7 +47,6 @@ from .watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, wa
 ProgressCallback = Callable[[RunProgressSnapshot, dict[str, Any]], None]
 HEARTBEAT_INTERVAL_SEC = 15
 PARALLEL_POLICIES = {"strict_all", "ghost_isolation"}
-STANDARD_QUORUM_PROFILE = "standard10-quorum6"
 
 
 SEAT_LIBRARY: dict[str, dict[str, str]] = {
@@ -70,33 +70,38 @@ SEAT_LIBRARY: dict[str, dict[str, str]] = {
         "thinking_angle": "从 GitHub、案例仓库、实现经验与可复用模式角度提出方案。",
         "special": "你不是在扮演人格，而是在真实多模型议会中承担外部搜索分析职责。重点补 GitHub 与实现案例。",
     },
-    "marshal-1": {
-        "filename": "14-marshal-1.md",
-        "thinking_angle": "从工程可执行性、落地路径与实现边界角度提出方案。",
-        "special": "你不是在扮演人格，而是在真实多模型议会中承担裨将分析职责。重点给出可执行落地路径。",
+    "opencode-kimi": {
+        "filename": "14-opencode-kimi.md",
+        "thinking_angle": "从创意发散、跨方案组合和新颖性角度提出方案。",
+        "special": "你不是在扮演人格，而是在真实多模型议会中承担裨将分析职责。你是 Kimi 位，重点补创意发散、跨方案组合和新颖性。",
     },
-    "marshal-2": {
-        "filename": "15-marshal-2.md",
-        "thinking_angle": "从结构整理、约束归纳与方案压缩角度提出方案。",
-        "special": "你不是在扮演人格，而是在真实多模型议会中承担裨将分析职责。重点做结构化归纳与约束压缩。",
+    "opencode-glm5": {
+        "filename": "15-opencode-glm5.md",
+        "thinking_angle": "从契约设计、状态管理和日志可追溯角度提出方案。",
+        "special": "你不是在扮演人格，而是在真实多模型议会中承担裨将分析职责。你是 GLM-5 位，重点补契约设计、状态管理和日志可追溯。",
     },
-    "marshal-3": {
-        "filename": "16-marshal-3.md",
-        "thinking_angle": "从用户体验、可部署性与新手路径角度提出方案。",
-        "special": "你不是在扮演人格，而是在真实多模型议会中承担裨将分析职责。重点补低门槛部署与新手体验。",
+    "opencode-minimax": {
+        "filename": "16-opencode-minimax.md",
+        "thinking_angle": "从人读可读性、产品表达和呈现链路角度提出方案。",
+        "special": "你不是在扮演人格，而是在真实多模型议会中承担裨将分析职责。你是 MiniMax 位，重点补人读可读性、产品表达和呈现链路。",
+    },
+    "opencode-qwen": {
+        "filename": "17-opencode-qwen.md",
+        "thinking_angle": "从多轮辩论、冲突收敛和终版成文角度提出方案。",
+        "special": "你不是在扮演人格，而是在真实多模型议会中承担裨将分析职责。你是 Qwen 位，重点补多轮辩论、冲突收敛和终版成文。",
     },
     "chaos": {
-        "filename": "17-chaos.md",
+        "filename": "18-chaos.md",
         "thinking_angle": "从反常规破局、打破局部最优与混沌创新角度提出方案。",
         "special": "你不是在扮演人格，而是在真实多模型议会中承担混沌分析职责。重点提出反共识与破局路线。",
     },
     "skeptic": {
-        "filename": "18-skeptic.md",
+        "filename": "19-skeptic.md",
         "thinking_angle": "从敌对审查、红队拆解、失败模式与强质疑角度提出方案。",
         "special": "你不是在扮演人格，而是在真实多模型议会中承担质疑分析职责。重点拆系统、找风险、提最难回答的反对意见。",
     },
     "fusion": {
-        "filename": "19-fusion.md",
+        "filename": "20-fusion.md",
         "thinking_angle": "从最终合并、决策账本整理与终版收敛角度提出方案。",
         "special": "你不是在扮演人格，而是在真实多模型议会中承担融合分析职责。重点把多模型分歧整合成可执行终版。",
     },
@@ -109,9 +114,10 @@ def _seat_sort_key(seat: CouncilSeat) -> int:
         "planning",
         "search-1",
         "search-2",
-        "marshal-1",
-        "marshal-2",
-        "marshal-3",
+        "opencode-kimi",
+        "opencode-glm5",
+        "opencode-minimax",
+        "opencode-qwen",
         "chaos",
         "skeptic",
         "fusion",
@@ -158,14 +164,14 @@ def _normalize_parallel_policy(value: str | None) -> str:
 
 def _effective_parallel_policy(config: PijiangConfig, seats: list[CouncilSeat]) -> str:
     candidate = _normalize_parallel_policy(config.execution_policy.parallel_policy)
-    if candidate == "ghost_isolation" and len(seats) >= 10 and council_mode(config) == "standard":
+    if candidate == "ghost_isolation" and len(seats) >= 11 and council_mode(config) == "standard11":
         return "ghost_isolation"
     return "strict_all"
 
 
 def _quorum_profile(parallel_policy: str) -> str:
     if parallel_policy == "ghost_isolation":
-        return STANDARD_QUORUM_PROFILE
+        return STANDARD11_QUORUM_PROFILE
     return "strict-all"
 
 
@@ -175,7 +181,7 @@ def _seat_categories_met(success_seat_ids: set[str]) -> bool:
             "controller" in success_seat_ids,
             "planning" in success_seat_ids,
             bool({"search-1", "search-2"} & success_seat_ids),
-            bool({"marshal-1", "marshal-2", "marshal-3"} & success_seat_ids),
+            bool(set(OPENCODE_MARSHAL_SEAT_IDS) & success_seat_ids),
             bool({"chaos", "skeptic"} & success_seat_ids),
         ]
     )
@@ -487,12 +493,16 @@ class CouncilEngine:
             "brief_path": str(brief_path),
             "project_path": topic,
             "started_at": created_at,
+            "seat_registry_version": SEAT_REGISTRY_VERSION,
             "council_mode": council_mode(self.config),
             "parallel_policy": parallel_policy,
             "quorum_profile": quorum_profile,
             "seat_count": len(seats),
             "active_profile_count": unique_active_profile_count(self.config),
             "obsidian_output_dir": str(output_dir),
+            "legacy_compat_applied": False,
+            "degraded_state": council_mode(self.config) != "standard11",
+            "resolved_seats": [seat.seat_id for seat in seats],
             "seats": [
                 {
                     "seat_id": seat.seat_id,

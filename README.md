@@ -8,7 +8,7 @@
   <a href="https://github.com/qiuxinyuan321/pijiang/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/qiuxinyuan321/pijiang/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB">
-  <img alt="Council" src="https://img.shields.io/badge/Council-10%20Seats-8B4A2C">
+  <img alt="Council" src="https://img.shields.io/badge/Council-11%20Seats-8B4A2C">
   <img alt="Demo first" src="https://img.shields.io/badge/Experience-demo--first-C97D42">
   <img alt="Obsidian recommended" src="https://img.shields.io/badge/Obsidian-Recommended-5A4B81">
 </p>
@@ -23,7 +23,7 @@
 
 对外安装包名是 `pijiang`，主命令是 `cpj`。
 
-当前公开主线继续保持 `10 席主议会`。另外存在一个可选的旁路守护层 `觉者`：它代表用户身份盯运行稳定性与外部中断修复，但不参与 quorum，也不改最终方案结论。
+当前公开主线已经切到 `11 席公开议会`：`controller / planning / search-1 / search-2 / opencode-kimi / opencode-glm5 / opencode-minimax / opencode-qwen / chaos / skeptic / fusion`。另外存在一个可选的旁路守护层 `觉者`：它代表用户身份盯运行稳定性与外部中断修复，但不参与 quorum，也不改最终方案结论。
 
 ## 核心理念
 
@@ -41,6 +41,7 @@
 | --- | --- |
 | 我想看完整文档导航 | [docs/index.md](docs/index.md) |
 | 我想先看当前最新真实 baseline 与觉者能力 | [docs/current-baseline-and-watcher.md](docs/current-baseline-and-watcher.md) |
+| 我想看 standard11 合同和执行门禁 | [docs/contracts/60-execution-contract.md](docs/contracts/60-execution-contract.md) |
 | 我想先理解它的核心理念 | [docs/project-philosophy.md](docs/project-philosophy.md) |
 | 我想看它是怎么一轮轮进化的 | [docs/project-philosophy.md](docs/project-philosophy.md) |
 | 如果我是 AI，我想理解这个项目对 AI 的价值 | [docs/for-ai-agents.md](docs/for-ai-agents.md) |
@@ -75,7 +76,7 @@
 
 | 步骤 | 命令 | 作用 | 你会看到什么 |
 | --- | --- | --- | --- |
-| 1 | `cpj init` | 生成标准配置与 Obsidian 模板 | 官方 10 席拓扑、`demo-config.json` |
+| 1 | `cpj init` | 生成标准配置与 Obsidian 模板 | 官方 11 席拓扑、`demo-config.json` |
 | 2 | `cpj doctor` | 体检 readiness，而不是带病硬跑 | `ready / warning / blocker` |
 | 3 | `cpj demo` | 零 API 验证系统价值 | 完整产物链与可视化结构 |
 | 4 | `cpj run` | 在 provider 准备好后进入真实运行 | 多模型议会输出、truth audit、regression cases |
@@ -84,7 +85,7 @@
 
 > **先看到价值，再接真实 provider；先过 doctor，再进 real run。**
 
-## 10 席完整议会，只在首页保留总览
+## 11 席公开议会，只在首页保留总览
 
 首页先讲清职责分工，不把细节一次性全部展开。
 
@@ -93,7 +94,7 @@
 | 主控层 | `controller` | 总体调度、收敛策略、降级决策 |
 | 规划层 | `planning` | 结构化规划与 variant 补强 |
 | 搜索层 | `search-1 / search-2` | 外部资料、案例与实现证据 |
-| 裨将层 | `marshal-1 / marshal-2 / marshal-3` | 工程落地、结构压缩、体验与部署路径 |
+| 四裨将 | `opencode-kimi / opencode-glm5 / opencode-minimax / opencode-qwen` | 创意发散、契约治理、产品表达、多轮辩论与终版成文 |
 | 对抗层 | `chaos / skeptic` | 打破局部最优、红队拆解与失败模式攻击 |
 | 融合层 | `fusion` | 决策账本、最终合并与终版输出 |
 
@@ -104,17 +105,17 @@
 这里需要明确三个不同概念：
 
 - `display default`
-  - 当前首页默认展示 `standard10`
+  - 当前首页默认展示 `standard11`
   - 目的是保持统一演示面与文档一致性
 - `evaluation profile`
-  - 当前内部评估固定比较 `single / reduced6 / standard10`
-  - 用来回答 10 席值不值，不直接等于推荐配置
+  - 当前内部评估 taxonomy 固定比较 `single / reduced6 / standard11`
+  - 用来回答 11 席值不值，不直接等于“所有任务最优”
 - `recommended config`
-  - 只有当同 case set 的 benchmark + truth audit 连续稳定后，才会获得推荐资格
-  - 当前 README 不把 `standard10` 写成“推荐最优”
+  - `standard11` 是唯一公开 canonical/default profile
+  - 当前 README 仍不把它写成“所有任务默认最优”
 
 <details>
-<summary>展开 10 席完整说明</summary>
+<summary>展开 11 席完整说明</summary>
 
 | 席位 | 职责 |
 | --- | --- |
@@ -122,9 +123,10 @@
 | `planning` | 规划者，优先由 coding plan provider 承担 |
 | `search-1` | 外部搜索者，偏产品/网页/资料检索 |
 | `search-2` | 外部搜索者，偏 GitHub/案例/实现检索 |
-| `marshal-1` | 裨将，偏工程可执行性与落地路径 |
-| `marshal-2` | 裨将，偏结构整理、约束归纳与方案压缩 |
-| `marshal-3` | 裨将，偏用户体验、可部署性与新手路径 |
+| `opencode-kimi` | 裨将 1，偏创意发散、跨方案组合与新颖性补强 |
+| `opencode-glm5` | 裨将 2，偏契约设计、状态治理与日志可追溯 |
+| `opencode-minimax` | 裨将 3，偏人读可读性、产品表达与呈现链路 |
+| `opencode-qwen` | 裨将 4，偏多轮辩论、冲突收敛与终版成文 |
 | `chaos` | 混沌者，负责打破局部最优 |
 | `skeptic` | 质疑者，负责红队拆解与失败模式 |
 | `fusion` | 融合者，负责最终合并、决策账本与终版输出 |
@@ -138,7 +140,8 @@
 | 信号 | 当前状态 | 去哪里看 |
 | --- | --- | --- |
 | `cpj init / doctor / demo / run` 主链路 | 已固化 | [docs/first-success-path.md](docs/first-success-path.md) |
-| `single / reduced6 / standard10` benchmark gate | 已完成，当前用于评估而非宣称最优 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
+| `standard11` seat/profile 合同 | 已落地到源码与治理文档 | [docs/contracts/60-execution-contract.md](docs/contracts/60-execution-contract.md) |
+| `single / reduced6 / standard11` benchmark taxonomy | 已落地，formal baseline 仍以 truth audit 结果为准 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
 | run 后 `truth audit` | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
 | `regression cases` 留痕 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
 | 幽灵堵车隔离并行 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
@@ -161,6 +164,7 @@
 ```text
 brief
 -> 10 路 variants
+-> 第 11 席 fusion
 -> idea-map
 -> debate-round-1
 -> debate-round-2
@@ -204,7 +208,7 @@ cpj init --yes
 
 - 一份标准配置
 - 一份 `demo-config.json`
-- 官方 `10` 席议会拓扑
+- 官方 `11` 席议会拓扑
 - 官方 Obsidian Vault 模板
 
 ### 2. 先体检，而不是硬跑
@@ -234,7 +238,7 @@ cpj doctor --json
 cpj demo
 ```
 
-`cpj demo` 不会调用真实外部 API，但会完整跑出一条 10 席产物链，并落到 Obsidian 模板目录里。默认会生成：
+`cpj demo` 不会调用真实外部 API，但会完整跑出一条 11 席产物链，并落到 Obsidian 模板目录里。默认会生成：
 
 - `00-brief.md`
 - `01-run-overview.md`
@@ -289,7 +293,7 @@ obsidian-vault/
 ├─ 00-Start-Here.md
 ├─ 10-Dashboards/
 │  ├─ 当前议题总览.md
-│  ├─ 10席议会拓扑.md
+│  ├─ 11席议会拓扑.md
 │  ├─ 运行历史.md
 │  └─ 执行进度.md
 └─ 皮匠/
@@ -302,12 +306,13 @@ obsidian-vault/
             ├─ 11-planning.md
             ├─ 12-search-1.md
             ├─ 13-search-2.md
-            ├─ 14-marshal-1.md
-            ├─ 15-marshal-2.md
-            ├─ 16-marshal-3.md
-            ├─ 17-chaos.md
-            ├─ 18-skeptic.md
-            ├─ 19-fusion.md
+            ├─ 14-opencode-kimi.md
+            ├─ 15-opencode-glm5.md
+            ├─ 16-opencode-minimax.md
+            ├─ 17-opencode-qwen.md
+            ├─ 18-chaos.md
+            ├─ 19-skeptic.md
+            ├─ 20-fusion.md
             ├─ 30-idea-map.md
             ├─ 40-debate-round-1.md
             ├─ 41-debate-round-2.md
@@ -468,7 +473,7 @@ obsidian-vault/
 - `tests/`: CLI、provider endpoint、路径与回归测试
 - `docs/`: 公开文档
 - `examples/`: 示例 brief
-- `tools/solution_factory/`: 历史兼容与内部参考
+- `tools/solution_factory/`: 仓库内 shipped 的真实议会入口与本地 baseline runner
 
 ## 当前命令面
 

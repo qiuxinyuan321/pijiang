@@ -66,7 +66,7 @@ def build_body(stage: str, lane: str) -> str:
             f"{evidence}"
             "# 目标与非目标\\n验证 runtime 回流链路\\n\\n"
             "# 用户/场景\\n仓库自测\\n\\n"
-            "# 系统架构\\n10 席议会\\n\\n"
+            "# 系统架构\\n11 席议会\\n\\n"
             "# 模块拆分\\nprogress、audit、benchmark\\n\\n"
             "# 关键流程\\nbrief -> variants -> fusion\\n\\n"
             "# 技术选型\\nPython\\n\\n"
@@ -99,7 +99,7 @@ def build_body(stage: str, lane: str) -> str:
                         "open_questions": [],
                     }
                 ],
-                "fallback_options": [{"topic": "benchmark", "option": "single / reduced6 / standard10"}],
+                "fallback_options": [{"topic": "benchmark", "option": "single / reduced6 / standard11"}],
                 "next_validation_steps": ["运行 pytest -q"],
             },
             ensure_ascii=False,
@@ -268,15 +268,15 @@ def test_build_benchmark_report_from_completed_runs(tmp_path: Path) -> None:
         tmp_path / "standard",
         fake_cli,
         topic="standard",
-        seat_ids=["controller", "planning", "search-1", "search-2", "marshal-1", "marshal-2", "marshal-3", "chaos", "skeptic", "fusion"],
+        seat_ids=["controller", "planning", "search-1", "search-2", "opencode-kimi", "opencode-glm5", "opencode-minimax", "opencode-qwen", "chaos", "skeptic", "fusion"],
     )
 
     report = build_benchmark_report(
         scenario_id="runtime-backflow",
-        summaries_by_mode={"single": single, "reduced6": reduced, "standard10": standard},
+        summaries_by_mode={"single": single, "reduced6": reduced, "standard11": standard},
     )
 
-    assert [item.mode for item in report.measurements] == ["single", "reduced6", "standard10"]
+    assert [item.mode for item in report.measurements] == ["single", "reduced6", "standard11"]
     assert all(item.truth_audit_path for item in report.measurements)
     assert all(hasattr(item, "audit_pass_success_rate") for item in report.measurements)
 
@@ -292,7 +292,7 @@ def test_ghost_isolation_cuts_over_before_slow_seats(tmp_path: Path) -> None:
     brief_path.write_text("# Brief\n\n验证 ghost isolation。", encoding="utf-8")
 
     original = {key: os.environ.get(key) for key in {"PIJIANG_FAKE_SLOW_LANES": "", "PIJIANG_FAKE_SLOW_SEC": ""}}
-    os.environ["PIJIANG_FAKE_SLOW_LANES"] = "search-2,marshal-3"
+    os.environ["PIJIANG_FAKE_SLOW_LANES"] = "search-2,opencode-qwen"
     os.environ["PIJIANG_FAKE_SLOW_SEC"] = "8"
     try:
         started = time.monotonic()
@@ -312,9 +312,9 @@ def test_ghost_isolation_cuts_over_before_slow_seats(tmp_path: Path) -> None:
 
     assert summary["parallel_policy"] == "ghost_isolation"
     assert summary["quorum_reached"] is True
-    assert summary["quorum_profile"] == "standard10-quorum6"
+    assert summary["quorum_profile"] == "standard11-quorum6"
     assert summary["ghosted_lane_count"] >= 1
-    assert {"search-2", "marshal-3"}.issubset(set(summary["ghosted_lane_ids"]))
+    assert {"search-2", "opencode-qwen"}.issubset(set(summary["ghosted_lane_ids"]))
     assert summary["fusion_cutover_ms"] > 0
     assert elapsed < 8
 
@@ -330,7 +330,7 @@ def test_strict_all_keeps_waiting_for_slow_seats(tmp_path: Path) -> None:
     brief_path.write_text("# Brief\n\n验证 strict_all。", encoding="utf-8")
 
     original = {key: os.environ.get(key) for key in {"PIJIANG_FAKE_SLOW_LANES": "", "PIJIANG_FAKE_SLOW_SEC": ""}}
-    os.environ["PIJIANG_FAKE_SLOW_LANES"] = "search-2,marshal-3"
+    os.environ["PIJIANG_FAKE_SLOW_LANES"] = "search-2,opencode-qwen"
     os.environ["PIJIANG_FAKE_SLOW_SEC"] = "3"
     try:
         started = time.monotonic()

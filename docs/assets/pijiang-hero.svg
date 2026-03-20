@@ -44,7 +44,7 @@
   <text x="112" y="420" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="23" font-weight="600" fill="#4F372B">发散 -&gt; 对抗 -&gt; 整合 -&gt; 收敛</text>
 
   <rect x="112" y="466" width="168" height="46" rx="23" fill="#FFF8EF" stroke="#D8C3A2"/>
-  <text x="196" y="495" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8C4E30">10 席完整议会</text>
+  <text x="196" y="495" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8C4E30">11 席公开议会</text>
   <rect x="304" y="466" width="168" height="46" rx="23" fill="#FFF8EF" stroke="#D8C3A2"/>
   <text x="388" y="495" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8C4E30">demo-first</text>
   <rect x="496" y="466" width="168" height="46" rx="23" fill="#FFF8EF" stroke="#D8C3A2"/>
@@ -53,7 +53,7 @@
   <rect x="744" y="110" width="396" height="296" rx="28" fill="url(#panel)" stroke="#D8C4A7"/>
   <text x="780" y="168" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#1F140F">职责不是人格，席位不是扮演</text>
   <text x="780" y="202" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="500" fill="#6A4A39">多个真实模型位各自承担固定职责</text>
-  <text x="780" y="228" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="500" fill="#6A4A39">不是同一个模型切换口吻来“演十个人”</text>
+  <text x="780" y="228" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="500" fill="#6A4A39">不是同一个模型切换口吻来“演十一个人”</text>
 
   <rect x="780" y="256" width="112" height="38" rx="19" fill="#F3E1CA"/>
   <text x="836" y="280" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">controller</text>
@@ -65,7 +65,8 @@
   <rect x="780" y="312" width="170" height="38" rx="19" fill="#F8EAD7"/>
   <text x="865" y="336" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">search-1 / search-2</text>
   <rect x="968" y="312" width="152" height="38" rx="19" fill="#F8EAD7"/>
-  <text x="1044" y="336" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">marshal-1 / 2 / 3</text>
+  <text x="1044" y="330" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#6A3E26">opencode-kimi / glm5</text>
+  <text x="1044" y="348" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#6A3E26">minimax / qwen</text>
 
   <rect x="780" y="368" width="132" height="38" rx="19" fill="#FCEFD9"/>
   <text x="846" y="392" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">chaos</text>

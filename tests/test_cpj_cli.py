@@ -61,7 +61,7 @@ def build_body(stage: str, lane: str) -> str:
             f"{evidence}"
             "# 目标与非目标\\n验证 cpj 主链路\\n\\n"
             "# 用户/场景\\n仓库自测\\n\\n"
-            "# 系统架构\\n10 席议会\\n\\n"
+            "# 系统架构\\n11 席议会\\n\\n"
             "# 模块拆分\\n配置、运行、进度、可视化\\n\\n"
             "# 关键流程\\nbrief -> variants -> fusion\\n\\n"
             "# 技术选型\\nPython\\n\\n"
@@ -70,7 +70,7 @@ def build_body(stage: str, lane: str) -> str:
             "# 待确认问题\\n无\\n"
         )
     if stage == "idea-map":
-        return "# 共识点\\n协议兼容\\n\\n# 独特亮点\\n真实多模型议会\\n\\n# 冲突点\\n无\\n\\n# 质疑焦点\\n测试桩是否覆盖 fusion\\n\\n# 可组合点\\ncpj + 10 席拓扑\\n"
+        return "# 共识点\\n协议兼容\\n\\n# 独特亮点\\n真实多模型议会\\n\\n# 冲突点\\n无\\n\\n# 质疑焦点\\n测试桩是否覆盖 fusion\\n\\n# 可组合点\\ncpj + 11 席拓扑\\n"
     if stage.startswith("debate-round-"):
         return f"# {stage}\\n- 议题：cpj 主链路\\n- 结论：保持结构化输出\\n"
     if stage == "final-decisions-json":
@@ -79,7 +79,7 @@ def build_body(stage: str, lane: str) -> str:
                 "decisions": [
                     {
                         "topic": "cpj 主链路",
-                        "decision": "保留 10 席议会拓扑与首次确认流程。",
+                        "decision": "保留 11 席公开议会拓扑与首次确认流程。",
                         "sources": [lane],
                         "reason": "这样才能体现多模型思路整合，而不是单模型角色扮演。",
                         "skeptic_challenge": "会不会导致等待更久？",
@@ -106,7 +106,7 @@ def build_body(stage: str, lane: str) -> str:
                 "sections": [
                     {
                         "title": "方案",
-                        "content": "验证 cpj 初始化、运行、Obsidian 模板与 10 席议会输出。",
+                        "content": "验证 cpj 初始化、运行、Obsidian 模板与 11 席议会输出。",
                         "sources": [lane],
                         "rationale": "保证首发命令面与运行器可用。",
                         "status": "accepted",
@@ -173,7 +173,7 @@ def test_cpj_init_writes_default_config_and_vault(tmp_path: Path) -> None:
     assert config_path.exists()
     assert (tmp_path / "demo-config.json").exists()
     assert (vault_path / "00-Start-Here.md").exists()
-    assert (vault_path / "10-Dashboards" / "10席议会拓扑.md").exists()
+    assert (vault_path / "10-Dashboards" / "11席议会拓扑.md").exists()
     config = load_config(config_path)
     controller = config.provider_profiles[0]
     assert config.execution_policy.parallel_policy == "ghost_isolation"
@@ -219,7 +219,7 @@ def test_cpj_demo_rejects_missing_explicit_config(tmp_path: Path, capsys) -> Non
 
 def test_cpj_run_executes_full_council_with_command_bridge_profiles(tmp_path: Path) -> None:
     brief_path = tmp_path / "brief.md"
-    brief_path.write_text("# Brief\n\n测试 cpj 10 席议会。", encoding="utf-8")
+    brief_path.write_text("# Brief\n\n测试 cpj 11 席议会。", encoding="utf-8")
     fake_cli = tmp_path / "fake_cli.py"
     write_fake_cli(fake_cli)
     config_path = build_command_bridge_config(tmp_path, fake_cli)

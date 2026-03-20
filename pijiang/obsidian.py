@@ -15,7 +15,7 @@ TEMPLATE_FILES: dict[str, str] = {
 建议先看：
 
 1. `10-Dashboards/当前议题总览.md`
-2. `10-Dashboards/10席议会拓扑.md`
+2. `10-Dashboards/11席议会拓扑.md`
 3. `10-Dashboards/运行历史.md`
 """,
     "10-Dashboards/当前议题总览.md": """# 当前议题总览
@@ -30,7 +30,7 @@ TEMPLATE_FILES: dict[str, str] = {
 - `50-fusion-decisions.md`
 - `90-final-solution-draft.md`
 """,
-    "10-Dashboards/10席议会拓扑.md": """# 10 席议会拓扑
+    "10-Dashboards/11席议会拓扑.md": """# 11 席议会拓扑
 
 标准完整议会固定为：
 
@@ -38,12 +38,13 @@ TEMPLATE_FILES: dict[str, str] = {
 2. 规划者
 3. 外部搜索者 1
 4. 外部搜索者 2
-5. 裨将 1
-6. 裨将 2
-7. 裨将 3
-8. 混沌者
-9. 质疑者
-10. 融合者
+5. 裨将 1 / Kimi
+6. 裨将 2 / GLM-5
+7. 裨将 3 / MiniMax
+8. 裨将 4 / Qwen
+9. 混沌者
+10. 质疑者
+11. 融合者
 
 这些都是分析职责，不是角色扮演人格。
 """,

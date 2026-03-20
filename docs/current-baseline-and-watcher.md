@@ -1,20 +1,21 @@
 # 当前真实 Baseline 与觉者守护层
 
-这页只说明当前最新一轮已验证的真实基线，不承担路线图或历史总账功能。
+这页只说明当前已经验证成功的真实基线，以及 standard11 切换到公开 canonical 之后的当前状态，不承担路线图或历史总账功能。
 
 ## 这页回答什么
 
-如果你只想快速知道三件事：
+如果你只想快速知道四件事：
 
-- 当前最新的真实 baseline 是什么
+- 当前最新成功的真实 baseline 是什么
 - 它已经验证到了什么程度
+- standard11 当前进行到哪一步
 - `觉者` 守护层到底是什么，不是什么
 
 先看这页就够了。
 
 更完整的历史回流账本仍然在 [runtime-backflow-validation.md](runtime-backflow-validation.md)。
 
-## 当前真实 baseline
+## 当前成功 baseline
 
 | 项目 | 当前值 |
 | --- | --- |
@@ -33,6 +34,27 @@
 - `standard10` 已恢复为真实可跑
 - 这轮 baseline 不再是 `reduced6` 的临时降级样本
 - `truth audit` 与 `觉者` 守护层都已经进入真实运行链
+
+这也是当前仓库里最后一条已经完整通过 `audit_status = success` 的 baseline 快照。
+
+## standard11 当前状态
+
+`standard11` 已经成为当前公开 canonical/default profile，但它的“最新成功 baseline”还在收敛中。当前已确认的事实是：
+
+| 项目 | 当前值 |
+| --- | --- |
+| 成功定向会 | `sf-20260320-194846-73268` |
+| 定向会角色 | standard11 合同与迁移规则的权威来源 |
+| 定向会状态 | `audit_status = success` |
+| 最新 public baseline 重跑 | `sf-20260320-211359-7232` |
+| 重跑状态 | `audit_status = fail` |
+| 已定位原因 | `claude-gpt` 外部 `503`，以及一条已在代码里修掉的 `topology_mismatch` 留痕缺口 |
+
+这意味着：
+
+- `standard11` 的 seat/profile 合同已经冻结并写进仓库
+- 当前 latest successful baseline 仍然是 `sf-20260320-154315-30532`
+- `sf-20260320-211359-7232` 是真实 regression 输入，不是可以拿来宣传成功的样本
 
 ## 你会拿到哪些产物
 
@@ -70,13 +92,15 @@
 
 ## 这轮验证了什么
 
-这条真实 run 已经验证到：
+当前已经被真实 run 证实的点包括：
 
 - `standard10` 已恢复为真实可跑
 - `opencode` 已重新接回运行链
 - `truth audit` 已接通并真实产出
 - `觉者` 已接通并真实留痕
 - 这轮结果已经不是 `reduced6` 的临时降级替身
+- `standard11` 的 seat/profile 合同已经由成功定向会冻结
+- 最新 `standard11` baseline 重跑把 `claude-gpt` 503 和状态留痕缺口压成了正式 regression 输入
 
 ## 这轮没有宣称什么
 
@@ -94,7 +118,7 @@
 ```powershell
 cpj doctor
 cpj run --watcher auto
-python -m tools.solution_factory run --brief <brief.md> --project-path <topic-path> --lanes standard10 --watcher auto
+python -m tools.solution_factory run --brief <brief.md> --project-path <topic-path> --lanes standard11 --watcher auto
 ```
 
 这页不展开长教程；首次成功路径仍然看 [first-success-path.md](first-success-path.md)。

@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pijiang.factory.registry import LEGACY_PROFILE_ALIASES, LEGACY_STANDARD10_PROFILE, SEAT_REGISTRY_VERSION, STANDARD11_PROFILE
 from pijiang.factory.runtime_support import trim_to_canonical_markdown, variant_quality_issue
 from pijiang.factory.types import WatcherPolicy
 from pijiang.factory.watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, watcher_enabled
@@ -280,7 +281,15 @@ DEFAULT_LANES = [
         "15-codex-skeptic.md",
         "你是质疑者/red team，不负责给漂亮方案，而负责拆系统。你必须在每个章节里主动寻找：错误前提、局部最优、隐藏复杂度、被忽略的失败模式、无法验证的口号、会导致后续返工的设计。你的目标是想办法破坏这个系统、质疑每个关键决定、指出议会可能集体自嗨的地方，并提出最难回答的反对意见。",
     ),
-    LaneSpec("opencode-kimi", "opencode", "opencode", "bailian/kimi-k2.5", "从创意发散、跨方案组合和新颖性角度提出方案。", "20-opencode-kimi.md"),
+    LaneSpec(
+        "opencode-kimi",
+        "opencode",
+        "opencode",
+        "bailian/kimi-k2.5",
+        "从创意发散、跨方案组合和新颖性角度提出方案。",
+        "20-opencode-kimi.md",
+        "你必须直接从 `# 问题定义` 开始输出，不允许输出 `Heading 1` 之类占位标题，不允许输出 Markdown 教学示例或 ```markdown 代码块。整体请保持克制精炼，但 10 个一级标题必须全部出现且每节都要有实质内容。",
+    ),
     LaneSpec("opencode-glm5", "opencode", "opencode", "bailian/glm-5", "从契约设计、状态管理和日志可追溯角度提出方案。", "21-opencode-glm5.md"),
     LaneSpec("opencode-minimax", "opencode", "opencode", "bailian/MiniMax-M2.5", "从可读性、产品表达和人读文档链路角度提出方案。", "22-opencode-minimax.md"),
     LaneSpec("opencode-qwen", "opencode", "opencode", "bailian/qwen3.5-plus", "从多轮辩论、冲突收敛和终版成文角度提出方案。", "23-opencode-qwen.md"),
@@ -289,23 +298,20 @@ DEFAULT_LANES = [
 
 SINGLE_LANE_IDS = [DEFAULT_LANES[0].id]
 REDUCED6_LANE_IDS = [lane.id for lane in DEFAULT_LANES[:6]]
-STANDARD10_LANE_IDS = [lane.id for lane in DEFAULT_LANES]
+LEGACY_STANDARD10_LANE_IDS = [lane.id for lane in DEFAULT_LANES if lane.id != "opencode-qwen"]
+STANDARD11_LANE_IDS = [lane.id for lane in DEFAULT_LANES]
 
 LANE_PRESETS: dict[str, list[str]] = {
     "single": SINGLE_LANE_IDS,
     "reduced6": REDUCED6_LANE_IDS,
-    "standard10": STANDARD10_LANE_IDS,
-    "default": STANDARD10_LANE_IDS,
+    LEGACY_STANDARD10_PROFILE: LEGACY_STANDARD10_LANE_IDS,
+    STANDARD11_PROFILE: STANDARD11_LANE_IDS,
+    "default": STANDARD11_LANE_IDS,
     "default6": REDUCED6_LANE_IDS,
     "default9": [lane.id for lane in DEFAULT_LANES[:9]],
-    "default10": STANDARD10_LANE_IDS,
 }
 
-LANE_PRESET_ALIASES: dict[str, str] = {
-    "default": "standard10",
-    "default6": "reduced6",
-    "default10": "standard10",
-}
+LANE_PRESET_ALIASES: dict[str, str] = {"default": STANDARD11_PROFILE, "default6": "reduced6", **LEGACY_PROFILE_ALIASES}
 
 
 def normalize_lane_profile(name: str) -> str:
@@ -314,7 +320,9 @@ def normalize_lane_profile(name: str) -> str:
         return LANE_PRESET_ALIASES[candidate]
     if candidate in LANE_PRESETS:
         return candidate
-    raise ValueError("supported lane sets are single, reduced6, standard10, default, default6, default9, default10")
+    raise ValueError(
+        "supported lane sets are single, reduced6, standard11, standard10, standard10-legacy, default, default6, default9, default10"
+    )
 
 
 def lane_seat_type(lane_id: str) -> str:
@@ -663,6 +671,25 @@ def parse_opencode_event_stream(stdout_text: str) -> str:
     return "\n\n".join(text_parts).strip()
 
 
+def build_retry_variant_prompt(
+    *,
+    base_prompt: str,
+    lane: LaneSpec,
+    error_summary: str,
+) -> str:
+    return (
+        f"{base_prompt.rstrip()}\n\n"
+        "上一次输出未通过质量门，请你只做纠错，不要换题，也不要输出解释。\n"
+        f"失败原因：{error_summary.strip()}\n"
+        "纠错要求：\n"
+        "1. 直接输出最终 Markdown 正文，不要输出代码块。\n"
+        "2. 必须严格使用 10 个指定一级标题。\n"
+        "3. 不允许输出占位标题、教程示例或过程旁白。\n"
+        "4. 若某节不确定，也必须给出你的当前判断，不能留空。\n"
+        f"请立即重写 `{lane.id}` 的最终可用输出。\n"
+    )
+
+
 def parse_variant_sections(raw_text: str) -> dict[str, str]:
     sections = {name: "" for name in CANONICAL_SECTIONS}
     collected: dict[str, list[str]] = {name: [] for name in CANONICAL_SECTIONS}
@@ -970,6 +997,15 @@ def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[La
 def build_variant_prompt(brief_text: str, lane: LaneSpec) -> str:
     section_template = "\n".join(f"# {name}" for name in CANONICAL_SECTIONS)
     special_block = f"额外要求：\n{lane.special_instructions.strip()}\n\n" if lane.special_instructions.strip() else ""
+    opencode_hardening_block = ""
+    if lane.family == "opencode":
+        opencode_hardening_block = (
+            "opencode 系产线硬约束：\n"
+            "1. 禁止输出 `Heading 1`、`Heading 2` 之类占位标题。\n"
+            "2. 禁止输出 Markdown 教学示例、模板示例或 ```markdown 代码块。\n"
+            "3. 必须直接从 `# 问题定义` 开始，严格给出 10 个一级中文标题。\n"
+            "4. 任何一节都不能留空；即使不确定，也要写出当前判断与风险。\n\n"
+        )
     return (
         f"{stage_marker_block('variant', lane.id)}\n"
         f"你是多模型方案工厂中的 `{lane.id}` 产线。\n"
@@ -980,6 +1016,7 @@ def build_variant_prompt(brief_text: str, lane: LaneSpec) -> str:
         "1. 聚焦项目方案脑暴，不进入写代码阶段。\n"
         "2. 观点要便于后续多轮融合。\n"
         "3. 每个章节都给出实质内容。\n\n"
+        f"{opencode_hardening_block}"
         f"{special_block}"
         f"Brief:\n{brief_text.strip()}\n"
     )
@@ -1061,6 +1098,7 @@ class RunTracker:
             "requested_lane_profile": manifest["requested_lane_profile"],
             "effective_lane_profile": manifest["effective_lane_profile"],
             "lane_statuses": {lane["id"]: "pending" for lane in manifest["lanes"]},
+            "seat_statuses": {seat["seat_id"]: "pending" for seat in manifest.get("seats", [])},
             "running_seat_ids": [],
             "current_seat_id": "",
             "current_message": "等待开始",
@@ -1093,6 +1131,8 @@ class RunTracker:
     def set_lane_status(self, lane_id: str, status: str) -> None:
         with self.lock:
             self.state["lane_statuses"][lane_id] = status
+            if lane_id in self.state["seat_statuses"]:
+                self.state["seat_statuses"][lane_id] = status
             self.state["failed_lane_count"] = sum(
                 1 for value in self.state["lane_statuses"].values() if value == "failed"
             )
@@ -1101,6 +1141,19 @@ class RunTracker:
             ]
             self.state["current_seat_id"] = lane_id if status == "running" else (self.state["running_seat_ids"][0] if self.state["running_seat_ids"] else "")
             self.state["current_message"] = f"{lane_id} => {status}"
+            self.state["updated_at"] = utc_now_iso()
+            write_json(self.status_path, self.state)
+
+    def set_seat_status(self, seat_id: str, status: str) -> None:
+        with self.lock:
+            self.state["seat_statuses"][seat_id] = status
+            if seat_id == "fusion":
+                current_running = [item for item in self.state["running_seat_ids"] if item != "fusion"]
+                if status == "running":
+                    current_running.append("fusion")
+                self.state["running_seat_ids"] = current_running
+                self.state["current_seat_id"] = "fusion" if status == "running" else (current_running[0] if current_running else "")
+                self.state["current_message"] = f"{seat_id} => {status}"
             self.state["updated_at"] = utc_now_iso()
             write_json(self.status_path, self.state)
 
@@ -1131,7 +1184,7 @@ class RunTracker:
     def complete(self, status: str) -> None:
         with self.lock:
             self.state["status"] = status
-            self.state["stage"] = "completed" if status == "success" else "failed"
+            self.state["stage"] = "completed" if status in {"success", "degraded", "needs-review"} else "failed"
             self.state["finished_at"] = utc_now_iso()
             self.state["running_seat_ids"] = []
             self.state["current_seat_id"] = ""
@@ -1175,13 +1228,14 @@ class SolutionFactory:
         unavailable_lane_ids = [lane.id for lane in requested_lanes if lane.family in unavailable_families]
         issues: list[dict[str, str]] = []
 
-        if requested_profile == "standard10" and set(unavailable_families) == {"opencode"}:
+        if requested_profile in {STANDARD11_PROFILE, LEGACY_STANDARD10_PROFILE} and set(unavailable_families) == {"opencode"}:
             effective_profile = "reduced6"
             effective_lanes = [lane for lane in DEFAULT_LANES if lane.id in REDUCED6_LANE_IDS]
+            requested_label = "standard11" if requested_profile == STANDARD11_PROFILE else "standard10-legacy"
             issues.append(
                 {
                     "code": "profile_degraded",
-                    "message": "standard10 请求中缺少 opencode 可执行链路，已自动降级为 reduced6 以保证真实会议先可运行。",
+                    "message": f"{requested_label} 请求中缺少 opencode 可执行链路，已自动降级为 reduced6 以保证真实会议先可运行。",
                 }
             )
 
@@ -1205,6 +1259,7 @@ class SolutionFactory:
         self,
         brief_path: Path,
         *,
+        requested_profile_input: str,
         requested_profile: str,
         effective_profile: str,
         lane_specs: list[LaneSpec],
@@ -1223,13 +1278,30 @@ class SolutionFactory:
             "brief_path": str(brief_path),
             "project_path": self.config.project_path,
             "append_factory_dir": self.config.append_factory_dir,
+            "seat_registry_version": SEAT_REGISTRY_VERSION,
+            "requested_lane_profile_input": requested_profile_input,
             "requested_lane_profile": requested_profile,
             "effective_lane_profile": effective_profile,
+            "legacy_compat_applied": requested_profile_input != requested_profile,
+            "degraded_state": effective_profile != requested_profile,
             "parallel_policy": "strict_all",
             "quorum_profile": "strict-all",
             "preflight": preflight,
             "lanes": [lane_manifest_payload(lane) for lane in lane_specs],
-            "seats": [lane_manifest_payload(lane) for lane in lane_specs],
+            "seat_count": len(lane_specs) + 1,
+            "seats": [lane_manifest_payload(lane) for lane in lane_specs]
+            + [
+                {
+                    "id": "fusion",
+                    "seat_id": "fusion",
+                    "seat_type": "fusion",
+                    "source_cli": "codex",
+                    "family": "fusion",
+                    "model": DEFAULT_CODEX_MODEL,
+                    "obsidian_filename": "20-fusion.md",
+                }
+            ],
+            "resolved_seats": [lane.id for lane in lane_specs] + ["fusion"],
             "started_at": utc_now_iso(),
             "timeouts": {"lane_timeout_sec": self.config.timeout_sec},
             "retry_policy": {"attempts": self.config.retry_attempts},
@@ -1274,7 +1346,7 @@ class SolutionFactory:
             return completed.stdout.strip()
         if lane.family == "opencode":
             parsed = parse_opencode_event_stream(completed.stdout)
-            return parsed or completed.stdout.strip()
+            return parsed.strip()
         raise ValueError(f"unsupported lane family: {lane.family}")
 
     def _write_lane_result(
@@ -1349,12 +1421,14 @@ class SolutionFactory:
             try:
                 if output_last_message_path.exists():
                     output_last_message_path.unlink()
+                attempt_prompt = prompt if attempt == 1 else build_retry_variant_prompt(base_prompt=prompt, lane=lane, error_summary=last_error)
+                write_text(lane_run_dir / f"prompt.attempt-{attempt}.txt", attempt_prompt)
                 prepared = build_lane_command(
                     lane,
                     workspace_root=self.workspace_root,
                     output_last_message_path=output_last_message_path,
                     command_overrides=self.config.command_overrides,
-                    prompt_text=prompt,
+                    prompt_text=attempt_prompt,
                     codex_reasoning_effort=self.config.codex_reasoning_effort,
                     codex_reasoning_summary=self.config.codex_reasoning_summary,
                     claude_effort=self.config.claude_effort,
@@ -1590,8 +1664,9 @@ class SolutionFactory:
         tracker.emit("fusion-step-success", stage=stage, provider=provider_used, output=str(output_last_message_path))
         return payload, provider_used, model_used
 
-    def run(self, *, brief_path: Path, lanes: str = "standard10", watcher_mode: str | None = None) -> dict[str, Any]:
+    def run(self, *, brief_path: Path, lanes: str = STANDARD11_PROFILE, watcher_mode: str | None = None) -> dict[str, Any]:
         recover_abandoned_runs(self.cache_root)
+        requested_profile_input = lanes.strip().lower()
         requested_profile, requested_lanes = self._select_lanes(lanes)
         brief_path = brief_path.expanduser().resolve()
         brief_text = brief_path.read_text(encoding="utf-8")
@@ -1604,6 +1679,7 @@ class SolutionFactory:
 
         run_id, run_dir, output_dir, manifest = self._prepare_run(
             brief_path,
+            requested_profile_input=requested_profile_input,
             requested_profile=requested_profile,
             effective_profile=effective_profile,
             lane_specs=lane_specs,
@@ -1653,7 +1729,7 @@ class SolutionFactory:
                             executed_action="controlled_degrade",
                             result="success",
                             observation=str(issue.get("message", "")).strip(),
-                            recommendation="已记录受控降级，当前 run 不再伪装为完整 standard10。",
+                            recommendation="已记录受控降级，当前 run 不再伪装为完整 standard11。",
                         )
 
         lane_results: list[LaneResult] = []
@@ -1708,6 +1784,7 @@ class SolutionFactory:
             write_json(fusion_dir / "fusion_context.json", fusion_context)
             tracker.add_artifact("fusion_context", str(fusion_dir / "fusion_context.json"))
             tracker.set_stage("fusion")
+            tracker.set_seat_status("fusion", "running")
 
             idea_map_text = self._run_fusion_text_step(
                 stage="idea-map",
@@ -1783,6 +1860,7 @@ class SolutionFactory:
             )
             write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results))
 
+            tracker.set_seat_status("fusion", "success")
             tracker.complete("success")
             summary["status"] = "success"
         except Exception as exc:
@@ -1790,6 +1868,8 @@ class SolutionFactory:
             write_text(run_dir / "98-error.txt", error_text + "\n")
             write_text(output_dir / "98-error.md", f"# 运行失败\n\n```\n{error_text}\n```\n")
             tracker.emit("run-error", stage=tracker.state.get("stage", ""), error=error_text)
+            if str(tracker.state.get("stage", "")) == "fusion":
+                tracker.set_seat_status("fusion", "failed")
             if watcher_recorder is not None:
                 watcher_recorder.alert(
                     trigger_code="fusion_failed" if tracker.state.get("stage") == "fusion" else "seat_failed",
@@ -1829,6 +1909,7 @@ class SolutionFactory:
         summary["regression_case_count"] = len(audit.regression_case_paths)
         if summary["status"] == "success" and audit.audit_status != "success":
             summary["status"] = audit.audit_status
+            tracker.complete(audit.audit_status)
         if watcher_recorder is not None:
             if watcher_monitor is not None:
                 watcher_monitor.stop()
@@ -1861,7 +1942,7 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="Run the solution factory.")
     run.add_argument("--brief", required=True, help="Absolute path to the brief markdown file.")
     run.add_argument("--project-path", required=True, help="Obsidian project path relative to the vault root.")
-    run.add_argument("--lanes", default="standard10", help="Lane set to run. Supported: single, reduced6, standard10, default, default6, default9, default10.")
+    run.add_argument("--lanes", default="standard11", help="Lane set to run. Supported: single, reduced6, standard11, standard10, default, default6, default9, default10.")
     run.add_argument("--watcher", choices=["auto", "on", "off"], default="auto", help="觉者守护层策略。")
     run.set_defaults(func=command_run)
     return parser

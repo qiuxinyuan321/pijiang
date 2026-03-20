@@ -190,8 +190,12 @@ def test_lane_presets_match_expected_sizes(tmp_path: Path) -> None:
     assert factory._select_lanes("default6")[0] == "reduced6"
     assert len(factory._select_lanes("default6")[1]) == 6
     assert len(factory._select_lanes("default9")[1]) == 9
-    assert factory._select_lanes("default10")[0] == "standard10"
-    assert len(factory._select_lanes("default10")[1]) == len(DEFAULT_LANES)
+    assert factory._select_lanes("default10")[0] == "standard10-legacy"
+    assert len(factory._select_lanes("default10")[1]) == len(DEFAULT_LANES) - 1
+    assert factory._select_lanes("standard10")[0] == "standard10-legacy"
+    assert len(factory._select_lanes("standard10")[1]) == len(DEFAULT_LANES) - 1
+    assert factory._select_lanes("standard11")[0] == "standard11"
+    assert len(factory._select_lanes("standard11")[1]) == len(DEFAULT_LANES)
 
 
 def test_resolve_command_prefix_uses_real_binary_path(monkeypatch, tmp_path: Path) -> None:

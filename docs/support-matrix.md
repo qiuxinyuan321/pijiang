@@ -25,9 +25,9 @@
 同时明确区分：
 
 - `display default`
-  - 当前文档展示默认是 `standard10`
+  - 当前文档展示默认是 `standard11`
 - `evaluation profile`
-  - 当前内部评估会用 `single / reduced6 / standard10`
+  - 当前内部评估 taxonomy 会用 `single / reduced6 / standard11`
 - `recommended config`
   - 只有通过 benchmark + truth audit 稳定验证后，才会获得推荐资格
 
@@ -38,7 +38,7 @@
 - 这不是“更激进的异步编排”，而是“达到法定人数后的幽灵隔离 cutover”
 - 可选 `觉者` 守护层默认用于真实 `run`
   - 它代表用户身份盯运行稳定性与外部中断修复
-  - 它不计入 `10 席`、不参与 quorum、也不参与 fusion 投票
+  - 它不计入 `11 席`、不参与 quorum、也不参与 fusion 投票
 
 如果某项能力不服务这条主线，它就不会抢 `Phase A+` 优先级。
 

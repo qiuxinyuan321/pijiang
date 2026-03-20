@@ -33,7 +33,7 @@
     - `strict_all`
     - `ghost_isolation`
   - 完整议会主线默认采用 `ghost_isolation`
-  - 达到 `standard10-quorum6` 后，少数慢 seat 不再阻塞 fusion
+  - 达到 `standard11-quorum6` 后，少数慢 seat 不再阻塞 fusion
   - cutover 后会显式记录：
     - `ghosted_lane_ids`
     - `late_lane_ids`
@@ -64,61 +64,53 @@
 - 动态 seat 重排
 - 流式预融合
 
-## 验证基线
+## 当前验证基线
 
-当前已经确认的真实验证基线包括：
+当前与 `standard11` 切换最相关的真实证据固定看三条：
 
-- 本地议会 `standard10` current-review
-  - run: `sf-20260318-232515-84632`
-  - 结果：`fake_success = 0`，`evidence_integrity = 100`，`fusion_integrity = 100`
-  - 已暴露真实未解项：`opencode-glm5` schema failure，以及多条成功 seat 仍存在 `missing_sections`
-- 本地议会 `single`
-  - run: `sf-20260318-235633-84632`
-  - 结果：`fake_success = 0`
-  - 说明：因为没有搜索 seat，`evidence_coverage` 不能和 `reduced6 / standard10` 直接横比
-- 本地议会 `reduced6`
-  - run: `sf-20260319-003734-84632`
-  - 结果：`fake_success = 0`，`evidence_integrity = 100`
-  - 说明：少席位模式更稳，但结构完整度仍低于理想值
-- 本地议会当前同议题重跑
-  - run: `sf-20260319-104416-60156`
-  - 结果：已能完整产出 `50-fusion-decisions.md`、`70-run-truth-audit.json`、`80-regression-cases-index.md`、`90-final-solution-draft.md`
-  - 状态：`audit_status = degraded`
-  - 说明：这次证明了本地议会已恢复“完整收敛链路”，但 seat 级稳定性仍未收敛到 `success`
-- 本地失败样本回审
-  - run: `sf-20260319-090954-84856`
-  - 结果：现在可被识别为 `fusion_parse_failure`
-  - 说明：旧失败不再只是历史事故，而是正式 regression case
+- 当前最后一条成功 baseline
+  - run: `sf-20260320-154315-30532`
+  - mode: `standard10`
+  - 结果：`audit_status = success`
+  - 含义：`truth audit` 与 `觉者` 都已经进入真实运行链，这条 baseline 仍是当前仓库里最后一条完整成功快照
+- 四裨将显式回归与 11 席公开议会定向会
+  - run: `sf-20260320-194846-73268`
+  - mode: `standard10`
+  - 结果：`audit_status = success`
+  - 含义：这场会冻结了 `standard11`、四个显式 `opencode-*` 裨将、`fusion` 第 11 席、`standard10-legacy`、治理文件与失效策略
+- standard11 public baseline 重跑
+  - run: `sf-20260320-211359-7232`
+  - mode: `standard11`
+  - 结果：`audit_status = fail`
+  - 原因：`claude-gpt` 外部 `503`、`timeout_partial_only`，以及一条已在代码中修掉的 `topology_mismatch`
+  - 含义：这条 run 的价值是形成正式 regression 输入，而不是被包装成成功样本
 
 ## benchmark gate 摘要
 
-本轮 `single / reduced6 / standard10` 已全部收齐，内部 benchmark 摘要如下：
+当前 benchmark taxonomy 已经升级成：
 
 - `single`
-  - `provider_calls = 7`
-  - `estimated_cost = 7.0`
-  - `failed_rate = 0`
-  - `fake_success_rate = 0`
 - `reduced6`
-  - `provider_calls = 12`
-  - `estimated_cost = 16.8`
-  - `failed_rate = 0`
-  - `fake_success_rate = 0`
-  - 已知退化项：`codex-chaos`、`codex-github-cases`、`codex-gpt`、`codex-web-research`
-- `standard10`
-  - `provider_calls = 16`
-  - `estimated_cost = 28.8`
-  - `failed_rate = 0.1`
-  - `fake_success_rate = 0`
-  - 已知退化项：`codex-chaos`、`codex-github-cases`、`codex-web-research`、`opencode-glm5`、`opencode-kimi`
+- `standard11`
 
-结论不是“10 席已经完美”，而是：
+但这三档现在要分开理解：
 
-- benchmark gate 已经证明这轮回流能力没有制造伪成功
+- `single`
+  - 已有历史真实样本
+  - 继续作为 formal benchmark 档位
+- `reduced6`
+  - 继续保留为 experimental evaluation profile
+  - 在 seat list 与对外口径冻结前，不作为正式主结论
+- `standard11`
+  - 已成为唯一公开 canonical/default profile
+  - 最新 formal rerun `sf-20260320-211359-7232` 失败，因此这轮不宣称已有新的成功 formal baseline
+
+结论不是“11 席已经稳定”，而是：
+
+- benchmark taxonomy、seat/profile 合同和治理门禁已经落地
 - 真实失败与退化已经被留痕，而不是被成功表象掩盖
-- 因此只回流已经被验证有效的 runtime/审计/质量门能力，不把 budget/circuit breaker 一起带进来
-- `standard10` 当前只是 `display default`，不是默认最优结论
-- `reduced6` 当前只是 `evaluation profile`，不是官方推荐配置
+- 当前 `standard11` 的主要 blocker 是 `claude-gpt` 外部 `503`
+- 因此仓库只公开已经通过验证的运行语义，不把这条失败 rerun 包装成成功
 
 基于这三条真实样本，本轮只回流以下能力：
 
