@@ -31,6 +31,12 @@
 - `recommended config`
   - 只有通过 benchmark + truth audit 稳定验证后，才会获得推荐资格
 
+当前执行语义默认值：
+
+- 完整议会主线默认 `parallel_policy = ghost_isolation`
+- 非完整拓扑或评估 profile 默认 `strict_all`
+- 这不是“更激进的异步编排”，而是“达到法定人数后的幽灵隔离 cutover”
+
 如果某项能力不服务这条主线，它就不会抢 `Phase A+` 优先级。
 
 ## Provider Matrix
@@ -41,6 +47,7 @@
 | `OpenAI-compatible` | `official` | 当前默认 HTTP 兼容主线 |
 | `Alibaba Coding Plan` | `official` | 官方一等公民 planning provider |
 | `Volcengine Coding Plan` | `official` | 官方一等公民 planning provider |
+| 幽灵隔离并行执行语义 | `official` | 对完整议会主线启用 `ghost_isolation` |
 | `Ollama` | `tested` | 支持接入，但 schema/质量要看模型能力 |
 | 其他 OpenAI-compatible relay | `community` | 通过 `relay_url` / `host+port+path_prefix` 接入 |
 | 自定义 `command_bridge` | `experimental` | 更适合调试或特殊桥接，不作为官方主线 |

@@ -25,6 +25,17 @@
 - 搜索位硬化
   - `search-1 / search-2` 不再只是名义搜索位
   - 搜索 seat 若没有证据，不应被视作正常成功
+- 并行幽灵隔离
+  - `ExecutionPolicy.parallel_policy` 已接通
+  - 当前支持：
+    - `strict_all`
+    - `ghost_isolation`
+  - 完整议会主线默认采用 `ghost_isolation`
+  - 达到 `standard10-quorum6` 后，少数慢 seat 不再阻塞 fusion
+  - cutover 后会显式记录：
+    - `ghosted_lane_ids`
+    - `late_lane_ids`
+    - `fusion_cutover_ms`
 
 ## 当前不宣称完成的能力
 
@@ -36,6 +47,8 @@
 - `quality_retry_threshold`
 - fallback replacement
 - 本地议会的字节级 subprocess streaming
+- 动态 seat 重排
+- 流式预融合
 
 ## 验证基线
 
@@ -100,12 +113,40 @@
 - regression cases/index
 - seat 质量门
 - 搜索位证据约束
+- 幽灵堵车隔离并行
 
 下面这些方向仍明确不回流：
 
 - budget / circuit breaker / fallback replacement
 - 本地议会的字节级 subprocess streaming
 - 任何未经过 benchmark gate 的前沿试验能力
+
+## 幽灵堵车隔离语义
+
+这轮正式把“少数幽灵堵车拖死三车道”的问题翻译成运行器语义：
+
+- `strict_all`
+  - 旧语义
+  - 所有 seat 都结束后才允许进入 fusion
+- `ghost_isolation`
+  - 新语义
+  - 对完整议会主线，当达到法定人数后，剩余慢 seat 会被隔离，不再阻塞 cutover
+
+当前 `皮匠` 的法定人数条件固定为：
+
+- 总成功席位至少 `6`
+- 且必须包含：
+  - `controller`
+  - 至少 1 个 `planning`
+  - 至少 1 个 `search`
+  - 至少 1 个 `marshal`
+  - 至少 1 个对抗席位：`chaos` 或 `skeptic`
+
+这意味着：
+
+- 少数慢 seat 不再自动等同于整场会议卡死
+- 关键席位缺失时仍然拒绝 cutover
+- 迟到结果会留痕，但不会回写当前 fusion 决策
 
 ## 本地议会正在继续推进、但尚未完整回流的方向
 

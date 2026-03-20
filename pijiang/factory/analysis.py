@@ -308,13 +308,20 @@ def load_truth_audit(path: Path) -> RunTruthAudit:
 
 
 def _compute_audit_status(reason_codes: set[str], fake_success_flags: list[str], degraded_chain_ids: list[str]) -> str:
-    fail_reasons = {"missing_final_draft", "fusion_parse_failure", "topology_mismatch", "stale_running_status"}
+    fail_reasons = {
+        "missing_final_draft",
+        "fusion_parse_failure",
+        "topology_mismatch",
+        "stale_running_status",
+        "critical_quorum_missing",
+    }
     degraded_reasons = {
         "search_without_real_evidence",
         "polluted_output",
         "schema_failure",
         "timeout_partial_only",
         "hidden_fallback",
+        "head_of_line_blocking",
     }
     review_reasons = {"missing_sections"}
 
@@ -381,7 +388,8 @@ def audit_council_run(
                 degraded_chain_ids.append(seat_id)
                 repair_candidates.append(f"{seat_id}: 为搜索位补真实证据与链接，不要只保留名义搜索。")
 
-        if variant_payload.get("status") == "success":
+        variant_status = str(variant_payload.get("status", "missing"))
+        if variant_status == "success":
             successful_texts.append(markdown_text)
             if quality.schema_valid:
                 seat_valid_count += 1
@@ -404,6 +412,12 @@ def audit_council_run(
                 degraded_chain_ids.append(seat_id)
                 reason_codes.add("missing_sections")
                 repair_candidates.append(f"{seat_id}: 强化结构化输出，保证 10 个 canonical sections 完整。")
+        elif variant_status == "late_result":
+            reason_codes.add("late_result_ignored")
+            repair_candidates.append(f"{seat_id}: 迟到结果已被忽略，评估是否需要更细的 cutover 窗口。")
+        elif variant_status == "ghost_blocked":
+            reason_codes.add("ghost_blocked")
+            repair_candidates.append(f"{seat_id}: 本轮被隔离为幽灵链路，检查 provider 慢链路与 cutover 条件。")
         else:
             degraded_chain_ids.append(seat_id)
             repair_candidates.append(f"{seat_id}: 修复失败 seat 的稳定性，并保留完整留痕。")
@@ -504,13 +518,27 @@ def audit_council_run(
     non_terminal_seats = [
         seat_id
         for seat_id, seat_status in status_payload.get("seat_statuses", {}).items()
-        if seat_status not in {"success", "failed"}
+        if seat_status not in {"success", "failed", "ghost_blocked", "late_result"}
     ]
     terminal_seat_count = sum(
-        1 for seat_status in status_payload.get("seat_statuses", {}).values() if seat_status in {"success", "failed"}
+        1
+        for seat_status in status_payload.get("seat_statuses", {}).values()
+        if seat_status in {"success", "failed", "ghost_blocked", "late_result"}
     )
     if non_terminal_seats or terminal_seat_count != expected_seat_count:
         reason_codes.add("topology_mismatch")
+    if summary.get("parallel_policy") == "ghost_isolation":
+        if summary.get("quorum_reached"):
+            reason_codes.add("quorum_fusion")
+        else:
+            reason_codes.add("critical_quorum_missing")
+        if summary.get("ghosted_lane_count", 0):
+            reason_codes.add("ghost_blocked")
+        if summary.get("late_result_count", 0):
+            reason_codes.add("late_result_ignored")
+    elif summary.get("parallel_policy") == "strict_all" and summary.get("failed_lane_count", 0):
+        reason_codes.add("head_of_line_blocking")
+    reason_codes.update(summary.get("reason_codes", []))
     if list((run_dir / "fusion").glob("*.claude.stdout.log")) and not fusion_fallback_logged:
         reason_codes.add("hidden_fallback")
     fusion_dir = run_dir / "fusion"
@@ -615,6 +643,10 @@ def build_benchmark_measurement(summary: dict[str, Any], *, audit: RunTruthAudit
         issue_readiness_score=_issue_readiness_score(output_dir),
         failed_rate=round(summary.get("failed_lane_count", 0) / expected, 3),
         fake_success_rate=round(len(loaded_audit.fake_success_flags) / max(1, expected), 3),
+        time_to_fusion_cutover_ms=int(summary.get("fusion_cutover_ms", 0) or 0),
+        ghosted_lane_count=int(summary.get("ghosted_lane_count", 0) or 0),
+        late_result_count=int(summary.get("late_result_count", 0) or 0),
+        cutover_latency_saved_ms=max(0, _latency_ms(status) - int(summary.get("fusion_cutover_ms", 0) or 0)),
         degraded_flags=loaded_audit.fake_success_flags + loaded_audit.degraded_chain_ids,
         truth_audit_path=str(output_dir / "70-run-truth-audit.json"),
     )
@@ -641,12 +673,12 @@ def render_benchmark_report_markdown(report: BenchmarkReport) -> str:
         "",
         "# Benchmark Report",
         "",
-        "| 模式 | run_id | latency_ms | provider_calls | estimated_cost | audit_pass_success_rate | cost_per_audited_success | schema_pass_rate | evidence_coverage | quality_score | issue_ready | failed_rate | fake_success_rate |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| 模式 | run_id | latency_ms | cutover_ms | ghosted | late | saved_ms | provider_calls | estimated_cost | audit_pass_success_rate | cost_per_audited_success | schema_pass_rate | evidence_coverage | quality_score | issue_ready | failed_rate | fake_success_rate |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for item in report.measurements:
         lines.append(
-            f"| {item.mode} | `{item.run_id}` | {item.latency_ms} | {item.provider_calls} | {item.estimated_cost} | "
+            f"| {item.mode} | `{item.run_id}` | {item.latency_ms} | {item.time_to_fusion_cutover_ms} | {item.ghosted_lane_count} | {item.late_result_count} | {item.cutover_latency_saved_ms} | {item.provider_calls} | {item.estimated_cost} | "
             f"{item.audit_pass_success_rate:.2f} | {item.cost_per_audited_success:.2f} | "
             f"{item.schema_pass_rate:.2f} | {item.evidence_coverage:.2f} | {item.quality_score:.2f} | {item.issue_readiness_score:.2f} | "
             f"{item.failed_rate:.2f} | {item.fake_success_rate:.2f} |"
