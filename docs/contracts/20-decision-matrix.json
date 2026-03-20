@@ -1,0 +1,74 @@
+{
+  "source_run_id": "sf-20260320-194846-73268",
+  "seat_registry_version": "2026-03-20-standard11",
+  "status": "frozen",
+  "canonical_profile": {
+    "profile_id": "standard11",
+    "display_status": "canonical-default",
+    "description": "唯一公开 canonical/default profile。"
+  },
+  "legacy_profiles": [
+    {
+      "profile_id": "standard10-legacy",
+      "input_tokens": [
+        "standard10",
+        "default10"
+      ],
+      "status": "legacy-only",
+      "notes": "仅用于历史读取、复盘和受控重放，不得静默冒充 standard11。"
+    }
+  ],
+  "seat_order": [
+    "controller",
+    "planning",
+    "search-1",
+    "search-2",
+    "opencode-kimi",
+    "opencode-glm5",
+    "opencode-minimax",
+    "opencode-qwen",
+    "chaos",
+    "skeptic",
+    "fusion"
+  ],
+  "deprecated_tokens": {
+    "marshal_seat_ids": [
+      "marshal-1",
+      "marshal-2",
+      "marshal-3"
+    ],
+    "status": "legacy-parser-only"
+  },
+  "benchmark_taxonomy": {
+    "formal": [
+      "single",
+      "standard11"
+    ],
+    "experimental": [
+      "reduced6"
+    ],
+    "notes": "reduced6 在 seat list 与对外口径冻结前保持 experimental。"
+  },
+  "failure_policy": {
+    "standard11_default": "hard-fail-on-missing-canonical-seat",
+    "allow_degraded_opt_in": true,
+    "degraded_profile_label": "standard11-degraded",
+    "silent_replacement_allowed": false,
+    "silent_alias_to_standard11_allowed": false
+  },
+  "guardian_layer": {
+    "seat_id": "watcher",
+    "display_name": "觉者",
+    "included_in_roster": false,
+    "counts_toward_quorum": false,
+    "counts_toward_benchmark": false
+  },
+  "required_manifest_fields": [
+    "requested_profile",
+    "effective_profile",
+    "seat_registry_version",
+    "resolved_seats",
+    "legacy_compat_applied",
+    "degraded_state"
+  ]
+}

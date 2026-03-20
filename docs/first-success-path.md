@@ -45,7 +45,7 @@ cpj init --yes
 - 标准配置骨架
 - demo 配置
 - Obsidian 模板
-- 标准 10 席拓扑
+- 标准 11 席拓扑
 
 ## Step 3: 先做 readiness 检查
 
@@ -62,7 +62,7 @@ cpj doctor --json
 这里要重点看三件事：
 
 - 当前 readiness 是 `ready`、`warning` 还是 `blocker`
-- 当前是“标准 10 席拓扑”，还是“当前实际可运行席位”
+- 当前是“标准 11 席拓扑”，还是“当前实际可运行席位”
 - 哪些 provider 还是 `needs_setup`
 
 如果这里还有 `blocker`，不要继续 real run。
@@ -75,7 +75,7 @@ cpj demo
 
 demo 的目的不是“玩具演示”，而是先让你看到：
 
-- 10 席议会长什么样
+- 11 席议会长什么样
 - 产物链长什么样
 - Obsidian 视图里能看到什么
 

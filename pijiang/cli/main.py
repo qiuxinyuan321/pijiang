@@ -19,6 +19,7 @@ from pijiang.factory.config import (
     unique_active_profile_count,
 )
 from pijiang.factory.council import CouncilEngine
+from pijiang.factory.registry import STANDARD11_PROFILE, STANDARD11_QUORUM_PROFILE
 from pijiang.factory.readiness import build_readiness_report
 from pijiang.obsidian import install_obsidian_template
 
@@ -57,7 +58,7 @@ def _short_reminder(config: PijiangConfig) -> str:
     return (
         f"本次将启用多模型议会，当前已启用 {provider_count} 个 profile。"
         "这不是单模型扮演多个角色，而是多个真实模型位的分析整合。"
-        "标准 10 席议会通常会比普通问答慢很多。"
+        "标准 11 席议会通常会比普通问答慢很多。"
     )
 
 
@@ -94,7 +95,7 @@ def command_init(args: argparse.Namespace) -> int:
             host_mode=args.host_mode,
         )
         if not args.yes:
-            print("将生成一套官方默认配置：10 路完整议会、cpj 命令面、以及 Obsidian 模板。")
+            print("将生成一套官方默认配置：11 席公开议会、cpj 命令面、以及 Obsidian 模板。")
             choice = input("输入 YES 继续，其他任意输入取消: ").strip()
             if choice != "YES":
                 print("已取消。")
@@ -145,7 +146,7 @@ def _doctor_payload(config: PijiangConfig) -> dict[str, object]:
         "readiness_status": readiness.status,
         "provider_preflight_status": readiness.status,
         "parallel_policy": config.execution_policy.parallel_policy,
-        "quorum_profile": "standard10-quorum6" if council_mode(config) == "standard" and config.execution_policy.parallel_policy == "ghost_isolation" else "strict-all",
+        "quorum_profile": STANDARD11_QUORUM_PROFILE if council_mode(config) == STANDARD11_PROFILE and config.execution_policy.parallel_policy == "ghost_isolation" else "strict-all",
         "active_profile_count": unique_active_profile_count(config),
         "runnable_profile_count": unique_active_profile_count(config, runnable_only=True),
         "active_profile_ids": sorted(active_profiles),
@@ -365,7 +366,7 @@ def command_demo(args: argparse.Namespace) -> int:
             brief_path.parent.mkdir(parents=True, exist_ok=True)
             brief_path.write_text(
                 "# Demo Brief\n\n"
-                "请展示皮匠 10 席议会在没有真实 API 的情况下，如何仍然把完整产物链展示给新用户。\n",
+                "请展示皮匠 11 席公开议会在没有真实 API 的情况下，如何仍然把完整产物链展示给新用户。\n",
                 encoding="utf-8",
             )
         elif not brief_path.exists():
@@ -391,7 +392,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cpj", description="臭皮匠（cpj）：多模型议会能力层。")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    init_parser = subparsers.add_parser("init", help="初始化 10 路完整议会配置与官方 Obsidian 模板。")
+    init_parser = subparsers.add_parser("init", help="初始化 11 席公开议会配置与官方 Obsidian 模板。")
     init_parser.add_argument("--config", help="配置文件路径。默认写到用户目录。")
     init_parser.add_argument("--workspace-root", help="工作区根目录。默认当前目录。")
     init_parser.add_argument("--output-root", help="输出根目录。默认 <workspace>/output。")

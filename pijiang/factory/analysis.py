@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .runtime_support import CANONICAL_SECTIONS, utc_now_iso, write_json, write_text
+from .registry import LEGACY_STANDARD10_PROFILE, OPENCODE_MARSHAL_SEAT_IDS, STANDARD11_PROFILE
 from .types import BenchmarkMeasurement, BenchmarkReport, EvidenceRef, QualityAssessment, RegressionCase, RunTruthAudit, SearchArtifact, SeatResult
 
 
@@ -31,12 +32,13 @@ DEFAULT_OUTPUT_FILENAMES = {
     "planning": "11-planning.md",
     "search-1": "12-search-1.md",
     "search-2": "13-search-2.md",
-    "marshal-1": "14-marshal-1.md",
-    "marshal-2": "15-marshal-2.md",
-    "marshal-3": "16-marshal-3.md",
-    "chaos": "17-chaos.md",
-    "skeptic": "18-skeptic.md",
-    "fusion": "19-fusion.md",
+    "opencode-kimi": "14-opencode-kimi.md",
+    "opencode-glm5": "15-opencode-glm5.md",
+    "opencode-minimax": "16-opencode-minimax.md",
+    "opencode-qwen": "17-opencode-qwen.md",
+    "chaos": "18-chaos.md",
+    "skeptic": "19-skeptic.md",
+    "fusion": "20-fusion.md",
 }
 
 MISSING_SECTION_PLACEHOLDER = "> 缺口：模型未显式给出本节内容。"
@@ -45,6 +47,8 @@ MISSING_SECTION_PLACEHOLDER = "> 缺口：模型未显式给出本节内容。"
 def _seat_type_from_id(item_id: str) -> str:
     if item_id in {"search-1", "search-2", "codex-github-cases", "codex-web-research"}:
         return "search"
+    if item_id in OPENCODE_MARSHAL_SEAT_IDS:
+        return "marshal"
     if item_id in {"chaos", "codex-chaos"}:
         return "chaos"
     if item_id in {"skeptic", "codex-skeptic"}:
@@ -172,14 +176,14 @@ def _section_map_from_markdown(text: str) -> dict[str, str]:
 
 def _mode_from_manifest(manifest: dict[str, Any]) -> str:
     effective_profile = str(manifest.get("effective_lane_profile", "")).strip().lower()
-    if effective_profile in {"single", "reduced6", "standard10"}:
+    if effective_profile in {"single", "reduced6", STANDARD11_PROFILE, LEGACY_STANDARD10_PROFILE, "standard10"}:
         return effective_profile
     seat_count = int(manifest.get("seat_count") or len(_manifest_items(manifest)))
     council_mode = str(manifest.get("council_mode", "")).strip()
     if seat_count == 1:
         return "single"
-    if council_mode == "standard" or seat_count >= 10:
-        return "standard10"
+    if council_mode == STANDARD11_PROFILE or seat_count >= 11:
+        return STANDARD11_PROFILE
     if seat_count >= 6:
         return "reduced6"
     return f"custom-{seat_count}"
@@ -677,7 +681,7 @@ def _provider_call_count(run_dir: Path) -> int:
 
 
 def _estimate_cost(provider_calls: int, mode: str) -> float:
-    weight = {"single": 1.0, "reduced6": 1.4, "standard10": 1.8}.get(mode, 1.0)
+    weight = {"single": 1.0, "reduced6": 1.4, STANDARD11_PROFILE: 1.9, LEGACY_STANDARD10_PROFILE: 1.8, "standard10": 1.8}.get(mode, 1.0)
     return round(provider_calls * weight, 2)
 
 
@@ -733,7 +737,7 @@ def build_benchmark_measurement(summary: dict[str, Any], *, audit: RunTruthAudit
 
 def build_benchmark_report(*, scenario_id: str, summaries_by_mode: dict[str, dict[str, Any]]) -> BenchmarkReport:
     report = BenchmarkReport(scenario_id=scenario_id, generated_at=utc_now_iso())
-    order = ["single", "reduced6", "standard10"]
+    order = ["single", "reduced6", STANDARD11_PROFILE]
     for mode in order:
         summary = summaries_by_mode.get(mode)
         if summary is None:

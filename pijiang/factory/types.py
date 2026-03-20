@@ -6,7 +6,7 @@ from typing import Any
 
 
 QUALITY_TIERS = {"weak", "standard", "strong", "elite"}
-ADAPTER_TYPES = {"openai_compatible", "ollama", "planning_api", "command_bridge", "demo"}
+ADAPTER_TYPES = {"openai_compatible", "ollama", "planning_api", "command_bridge", "opencode", "demo"}
 SEAT_TYPES = {"controller", "planning", "search", "marshal", "chaos", "skeptic", "fusion"}
 CONFIG_STATUSES = {"configured", "needs_setup", "disabled"}
 

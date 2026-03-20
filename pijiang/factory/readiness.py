@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .config import PijiangConfig, active_seats, build_default_council_topology, find_provider, unique_active_profile_count
 from .endpoints import is_http_provider, resolve_provider_base_url
+from .providers import _resolve_opencode_command
 from .types import EndpointDiagnostic, ProviderProfile, ReadinessIssue, ReadinessReport
 
 
@@ -21,6 +22,12 @@ def _append_issue(
 
 
 def _command_exists(profile: ProviderProfile) -> bool:
+    if profile.adapter_type == "opencode":
+        try:
+            _resolve_opencode_command()
+            return True
+        except Exception:
+            return False
     if not profile.command:
         return False
     candidate = str(profile.command[0]).strip()
@@ -181,14 +188,14 @@ def build_readiness_report(config: PijiangConfig) -> ReadinessReport:
                     message=f"profile `{profile.id}` 需要环境变量 `{profile.api_key_env}`，当前未设置。",
                     fix_hint="先设置环境变量，再运行 cpj doctor。",
                 )
-        elif profile.adapter_type == "command_bridge":
+        elif profile.adapter_type in {"command_bridge", "opencode"}:
             if not _command_exists(profile):
                 _append_issue(
                     blockers,
                     level="blocker",
                     code=f"profile_missing_command:{profile.id}",
-                    message=f"profile `{profile.id}` 的 command bridge 不可执行。",
-                    fix_hint="补齐 command，或确认命令在 PATH 中可用。",
+                    message=f"profile `{profile.id}` 的命令执行链不可用。",
+                    fix_hint="补齐 command，或确认 opencode / command bridge 在本机可执行。",
                 )
         if "search" in profile.roles and not profile.capabilities.supports_external_search:
             _append_issue(
@@ -215,12 +222,12 @@ def build_readiness_report(config: PijiangConfig) -> ReadinessReport:
             message="可真实运行的 profile 少于 6 个。",
             fix_hint="先完成必要 profile 的真实配置，或使用 cpj demo 查看系统效果。",
         )
-    if len(runnable_seats) < 10:
+    if len(runnable_seats) < 11:
         _append_issue(
             warnings,
             level="warning",
             code="reduced_council_mode",
-            message="当前实际可运行席位少于 10 席，将进入 reduced_council_mode。",
+            message="当前实际可运行席位少于 11 席，将进入 reduced_council_mode。",
             fix_hint="补齐缺失席位的可运行 provider。",
         )
 

@@ -17,9 +17,10 @@ from .types import (
     WatcherPolicy,
     WorkflowProfile,
 )
+from .registry import LEGACY_STANDARD10_PROFILE, OPENCODE_MARSHAL_SEAT_IDS, STANDARD11_PROFILE
 
 
-DEFAULT_COUNCIL_VERSION = "v6"
+DEFAULT_COUNCIL_VERSION = "v7"
 
 
 @dataclass
@@ -145,43 +146,48 @@ def build_default_provider_profiles() -> list[ProviderProfile]:
             notes="负责 GitHub/案例/实现检索。",
         ),
         ProviderProfile(
-            id="marshal-engineering",
-            adapter_type="openai_compatible",
-            model="claude-sonnet-4.6",
+            id="opencode-kimi",
+            adapter_type="opencode",
+            model="bailian/kimi-k2.5",
             roles=["marshal"],
-            base_url="https://api.openai.com/v1",
-            api_key_env="OPENAI_API_KEY",
             priority=60,
             config_status="needs_setup",
             quality_tier="strong",
-            capabilities=_capabilities(transport="openai-compatible", supports_json_schema=True),
-            notes="裨将位 1：工程可执行性与落地路径。",
+            capabilities=_capabilities(transport="opencode", supports_json_schema=True),
+            notes="裨将位 1：Kimi，负责创意发散、跨方案组合和新颖性补强。",
         ),
         ProviderProfile(
-            id="marshal-structure",
-            adapter_type="openai_compatible",
-            model="gemini-3.1-pro",
+            id="opencode-glm5",
+            adapter_type="opencode",
+            model="bailian/glm-5",
             roles=["marshal"],
-            base_url="https://api.openai.com/v1",
-            api_key_env="OPENAI_API_KEY",
             priority=70,
             config_status="needs_setup",
             quality_tier="strong",
-            capabilities=_capabilities(transport="openai-compatible", supports_json_schema=True),
-            notes="裨将位 2：结构整理、约束归纳与方案压缩。",
+            capabilities=_capabilities(transport="opencode", supports_json_schema=True),
+            notes="裨将位 2：GLM-5，负责契约设计、状态管理和日志可追溯。",
         ),
         ProviderProfile(
-            id="marshal-ux",
-            adapter_type="openai_compatible",
-            model="gpt-5.4",
+            id="opencode-minimax",
+            adapter_type="opencode",
+            model="bailian/MiniMax-M2.5",
             roles=["marshal"],
-            base_url="https://api.openai.com/v1",
-            api_key_env="OPENAI_API_KEY",
             priority=80,
             config_status="needs_setup",
             quality_tier="strong",
-            capabilities=_capabilities(transport="openai-compatible", supports_json_schema=True),
-            notes="裨将位 3：用户体验、可部署性与新手路径。",
+            capabilities=_capabilities(transport="opencode", supports_json_schema=True),
+            notes="裨将位 3：MiniMax，负责人读可读性、产品表达和呈现链路。",
+        ),
+        ProviderProfile(
+            id="opencode-qwen",
+            adapter_type="opencode",
+            model="bailian/qwen3.5-plus",
+            roles=["marshal"],
+            priority=85,
+            config_status="needs_setup",
+            quality_tier="strong",
+            capabilities=_capabilities(transport="opencode", supports_json_schema=True),
+            notes="裨将位 4：Qwen，负责多轮辩论、冲突收敛和终版成文。",
         ),
         ProviderProfile(
             id="chaos-breaker",
@@ -233,9 +239,10 @@ def build_demo_provider_profiles() -> list[ProviderProfile]:
         "planning-volcengine": "demo-planning-backup",
         "search-web": "demo-search-web",
         "search-github": "demo-search-github",
-        "marshal-engineering": "demo-marshal-engineering",
-        "marshal-structure": "demo-marshal-structure",
-        "marshal-ux": "demo-marshal-ux",
+        "opencode-kimi": "demo-opencode-kimi",
+        "opencode-glm5": "demo-opencode-glm5",
+        "opencode-minimax": "demo-opencode-minimax",
+        "opencode-qwen": "demo-opencode-qwen",
         "chaos-breaker": "demo-chaos",
         "skeptic-redteam": "demo-skeptic",
         "fusion-editor": "demo-fusion",
@@ -256,20 +263,21 @@ def build_default_council_topology() -> CouncilTopology:
         CouncilSeat("planning", "planning", "planning-alibaba", "规划者", "优先由 coding plan provider 承担。"),
         CouncilSeat("search-1", "search", "search-web", "外部搜索者 1", "偏产品/网页/资料检索。"),
         CouncilSeat("search-2", "search", "search-github", "外部搜索者 2", "偏 GitHub/案例/实现检索。"),
-        CouncilSeat("marshal-1", "marshal", "marshal-engineering", "裨将 1", "偏工程可执行性与落地路径。"),
-        CouncilSeat("marshal-2", "marshal", "marshal-structure", "裨将 2", "偏结构整理、约束归纳与方案压缩。"),
-        CouncilSeat("marshal-3", "marshal", "marshal-ux", "裨将 3", "偏用户体验、可部署性与新手路径。"),
+        CouncilSeat("opencode-kimi", "marshal", "opencode-kimi", "裨将 1 / Kimi", "偏创意发散、跨方案组合和新颖性补强。"),
+        CouncilSeat("opencode-glm5", "marshal", "opencode-glm5", "裨将 2 / GLM-5", "偏契约设计、状态管理和日志可追溯。"),
+        CouncilSeat("opencode-minimax", "marshal", "opencode-minimax", "裨将 3 / MiniMax", "偏人读可读性、产品表达和呈现链路。"),
+        CouncilSeat("opencode-qwen", "marshal", "opencode-qwen", "裨将 4 / Qwen", "偏多轮辩论、冲突收敛和终版成文。"),
         CouncilSeat("chaos", "chaos", "chaos-breaker", "混沌者", "负责反常规破局与打破局部最优。"),
         CouncilSeat("skeptic", "skeptic", "skeptic-redteam", "质疑者", "负责红队拆解、失败模式与反驳。"),
         CouncilSeat("fusion", "fusion", "fusion-editor", "融合者", "负责最终合并、决策账本与终版输出。"),
     ]
     return CouncilTopology(
-        mode="standard",
+        mode=STANDARD11_PROFILE,
         seat_count=len(seats),
         controller_seat="controller",
         planning_seats=["planning"],
         search_seats=["search-1", "search-2"],
-        marshal_seats=["marshal-1", "marshal-2", "marshal-3"],
+        marshal_seats=list(OPENCODE_MARSHAL_SEAT_IDS),
         chaos_seat="chaos",
         skeptic_seat="skeptic",
         fusion_seat="fusion",
@@ -449,8 +457,10 @@ def unique_active_profile_count(config: PijiangConfig, *, runnable_only: bool = 
 def council_mode(config: PijiangConfig) -> str:
     seat_count = len(active_seats(config, runnable_only=True))
     profile_count = unique_active_profile_count(config, runnable_only=True)
+    if seat_count >= 11 and profile_count >= 7:
+        return STANDARD11_PROFILE
     if seat_count >= 10 and profile_count >= 6:
-        return "standard"
+        return LEGACY_STANDARD10_PROFILE
     if seat_count >= 6:
         return "reduced_council_mode"
     return "minimal_mode"
