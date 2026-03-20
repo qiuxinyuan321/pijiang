@@ -4,6 +4,7 @@ import argparse
 import concurrent.futures
 import json
 import os
+import os.path
 import re
 import shutil
 import subprocess
@@ -14,6 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pijiang.factory.runtime_support import trim_to_canonical_markdown, variant_quality_issue
+from pijiang.factory.types import WatcherPolicy
+from pijiang.factory.watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, watcher_enabled
 from tools.workspace_paths import REPO_ROOT, get_workspace_drive_root, get_workspace_name, get_workspace_root
 
 
@@ -218,6 +222,7 @@ class SolutionFactoryConfig:
     claude_effort: str | None = "max"
     opencode_variant: str | None = "max"
     retry_attempts: int = 2
+    watcher_policy: WatcherPolicy = field(default_factory=WatcherPolicy)
 
 
 @dataclass
@@ -282,12 +287,62 @@ DEFAULT_LANES = [
 ]
 
 
+SINGLE_LANE_IDS = [DEFAULT_LANES[0].id]
+REDUCED6_LANE_IDS = [lane.id for lane in DEFAULT_LANES[:6]]
+STANDARD10_LANE_IDS = [lane.id for lane in DEFAULT_LANES]
+
 LANE_PRESETS: dict[str, list[str]] = {
-    "default": [lane.id for lane in DEFAULT_LANES],
-    "default6": [lane.id for lane in DEFAULT_LANES[:6]],
+    "single": SINGLE_LANE_IDS,
+    "reduced6": REDUCED6_LANE_IDS,
+    "standard10": STANDARD10_LANE_IDS,
+    "default": STANDARD10_LANE_IDS,
+    "default6": REDUCED6_LANE_IDS,
     "default9": [lane.id for lane in DEFAULT_LANES[:9]],
-    "default10": [lane.id for lane in DEFAULT_LANES],
+    "default10": STANDARD10_LANE_IDS,
 }
+
+LANE_PRESET_ALIASES: dict[str, str] = {
+    "default": "standard10",
+    "default6": "reduced6",
+    "default10": "standard10",
+}
+
+
+def normalize_lane_profile(name: str) -> str:
+    candidate = name.strip().lower()
+    if candidate in LANE_PRESET_ALIASES:
+        return LANE_PRESET_ALIASES[candidate]
+    if candidate in LANE_PRESETS:
+        return candidate
+    raise ValueError("supported lane sets are single, reduced6, standard10, default, default6, default9, default10")
+
+
+def lane_seat_type(lane_id: str) -> str:
+    if lane_id == "codex-gpt":
+        return "controller"
+    if lane_id == "claude-gpt":
+        return "planning"
+    if lane_id in {"codex-github-cases", "codex-web-research"}:
+        return "search"
+    if lane_id == "codex-chaos":
+        return "chaos"
+    if lane_id == "codex-skeptic":
+        return "skeptic"
+    if lane_id.startswith("opencode-"):
+        return "marshal"
+    return "marshal"
+
+
+def lane_manifest_payload(lane: LaneSpec) -> dict[str, Any]:
+    return {
+        "id": lane.id,
+        "seat_id": lane.id,
+        "seat_type": lane_seat_type(lane.id),
+        "source_cli": lane.source_cli,
+        "family": lane.family,
+        "model": lane.model,
+        "obsidian_filename": lane.obsidian_filename,
+    }
 
 
 def default_cache_root(repo_root: Path = REPO_ROOT) -> Path:
@@ -336,6 +391,39 @@ def get_user_environment_variable(name: str) -> str:
         return ""
 
 
+_SEMVER_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+def _semver_key(value: str) -> tuple[int, int, int]:
+    matched = _SEMVER_RE.search(value)
+    if not matched:
+        return (0, 0, 0)
+    return tuple(int(part) for part in matched.groups())
+
+
+def _find_bun_cached_opencode() -> Path | None:
+    if os.name != "nt":
+        return None
+    bun_root = Path.home() / ".bun" / "install" / "cache"
+    if not bun_root.exists():
+        return None
+    candidates: list[Path] = []
+    for directory in bun_root.glob("opencode-windows-x64@*"):
+        executable = directory / "bin" / "opencode.exe"
+        if executable.exists():
+            candidates.append(executable)
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda item: (
+            _semver_key(item.parent.parent.name),
+            item.stat().st_mtime,
+        ),
+        reverse=True,
+    )
+    return candidates[0]
+
+
 def resolve_command_prefix(
     family: str,
     *,
@@ -350,16 +438,26 @@ def resolve_command_prefix(
         return [str(item) for item in value]
 
     if family == "codex":
-        return ["codex"]
+        resolved = shutil.which("codex")
+        return [resolved] if resolved else ["codex"]
     if family == "claude":
-        return ["claude"]
+        resolved = shutil.which("claude")
+        return [resolved] if resolved else ["claude"]
     if family == "opencode":
         resolved = shutil.which("opencode")
         if resolved:
             return [resolved]
+        env_override = first_env("PIJIANG_OPENCODE_PATH", "OPENCODE_PATH")
+        if env_override:
+            override_path = Path(env_override).expanduser()
+            if override_path.exists():
+                return [str(override_path)]
         local_binary = workspace_root / "opencode-src" / "packages" / "opencode" / "node_modules" / "opencode-windows-x64" / "bin" / "opencode.exe"
         if local_binary.exists():
             return [str(local_binary)]
+        bun_cached = _find_bun_cached_opencode()
+        if bun_cached is not None:
+            return [str(bun_cached)]
         local_bin = workspace_root / "opencode-src" / "packages" / "opencode" / "bin" / "opencode"
         bun_path = shutil.which("bun")
         if bun_path and local_bin.exists():
@@ -439,7 +537,6 @@ def build_lane_command(
         return PreparedCommand(command=command, cwd=workspace_root, stdin_text=prompt_text)
 
     if lane.family == "claude":
-        prompt_argument = prompt_text or ""
         command = prefix + [
             "-p",
             "--output-format",
@@ -453,8 +550,7 @@ def build_lane_command(
         ]
         if claude_effort:
             command.extend(["--effort", claude_effort])
-        command.append(prompt_argument)
-        return PreparedCommand(command=command, cwd=workspace_root, stdin_text=None)
+        return PreparedCommand(command=command, cwd=workspace_root, stdin_text=prompt_text or "")
 
     if lane.family == "opencode":
         env: dict[str, str] = build_opencode_runtime_env(opencode_runtime_root)
@@ -473,7 +569,9 @@ def build_lane_command(
         ]
         if opencode_variant:
             command.extend(["--variant", opencode_variant])
-        return PreparedCommand(command=command, cwd=workspace_root, env=env, stdin_text=prompt_text)
+        if prompt_text:
+            command.append(prompt_text)
+        return PreparedCommand(command=command, cwd=workspace_root, env=env, stdin_text=None)
 
     raise ValueError(f"unsupported lane family: {lane.family}")
 
@@ -544,8 +642,7 @@ def build_claude_fusion_command(
         command.extend(["--effort", claude_effort])
     if json_schema is not None:
         command.extend(["--json-schema", json.dumps(json_schema, ensure_ascii=False)])
-    command.append(prompt_text)
-    return PreparedCommand(command=command, cwd=workspace_root, stdin_text=None)
+    return PreparedCommand(command=command, cwd=workspace_root, stdin_text=prompt_text)
 
 
 def parse_opencode_event_stream(stdout_text: str) -> str:
@@ -668,6 +765,52 @@ def render_brief_markdown(brief_text: str, *, run_id: str, created_at: str) -> s
         }
     )
     return f"{frontmatter}\n\n{brief_text.strip()}\n"
+
+
+def render_preflight_markdown(
+    payload: dict[str, Any],
+    *,
+    run_id: str,
+    created_at: str,
+) -> str:
+    frontmatter = frontmatter_block(
+        {
+            "sf_run_id": run_id,
+            "sf_stage": "preflight",
+            "sf_lane": "preflight",
+            "sf_source_cli": "local",
+            "sf_model": "n/a",
+            "sf_created_at": created_at,
+        }
+    )
+    lines = [
+        frontmatter,
+        "",
+        "# 运行前检查",
+        "",
+        f"- 请求 profile：`{payload.get('requested_lane_profile', '')}`",
+        f"- 实际 profile：`{payload.get('effective_lane_profile', '')}`",
+        "",
+    ]
+    issues = payload.get("issues", [])
+    if issues:
+        lines.append("## 发现的问题")
+        for issue in issues:
+            lines.append(f"- `{issue.get('code', 'unknown')}`：{issue.get('message', '').strip()}")
+        lines.append("")
+    unavailable_lane_ids = payload.get("unavailable_lane_ids", [])
+    if unavailable_lane_ids:
+        lines.append("## 当前不可用 lane")
+        for lane_id in unavailable_lane_ids:
+            lines.append(f"- `{lane_id}`")
+        lines.append("")
+    availability = payload.get("family_availability", {})
+    if availability:
+        lines.append("## Family 可用性")
+        for family, item in availability.items():
+            lines.append(f"- `{family}`：`{item.get('status', 'unknown')}` / `{item.get('detail', '')}`")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_stage_markdown(
@@ -793,7 +936,7 @@ def render_final_draft_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[LaneResult]) -> str:
+def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[LaneResult], watcher_filename: str | None = None) -> str:
     frontmatter = frontmatter_block(
         {
             "sf_run_id": run_id,
@@ -819,6 +962,8 @@ def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[La
             "- [90-final-solution-draft.md](90-final-solution-draft.md)",
         ]
     )
+    if watcher_filename:
+        lines.extend(["", "## 守护层", f"- [{watcher_filename}]({watcher_filename})"])
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -907,15 +1052,31 @@ class RunTracker:
         self.lock = threading.Lock()
         self.state = {
             "run_id": manifest["run_id"],
+            "owner_pid": manifest.get("owner_pid", 0),
             "status": "running",
             "stage": "bootstrap",
             "started_at": manifest["started_at"],
             "finished_at": "",
+            "updated_at": manifest["started_at"],
+            "requested_lane_profile": manifest["requested_lane_profile"],
+            "effective_lane_profile": manifest["effective_lane_profile"],
             "lane_statuses": {lane["id"]: "pending" for lane in manifest["lanes"]},
+            "running_seat_ids": [],
+            "current_seat_id": "",
+            "current_message": "等待开始",
             "failed_lane_count": 0,
+            "watcher_enabled": False,
+            "watcher_state": "idle",
+            "watcher_alert_count": 0,
+            "watcher_action_count": 0,
+            "watcher_last_message": "",
             "artifacts": {},
         }
         write_json(self.status_path, self.state)
+
+    def snapshot_payload(self) -> dict[str, Any]:
+        with self.lock:
+            return dict(self.state)
 
     def emit(self, kind: str, **payload: Any) -> None:
         with self.lock:
@@ -924,6 +1085,9 @@ class RunTracker:
     def set_stage(self, stage: str) -> None:
         with self.lock:
             self.state["stage"] = stage
+            self.state["current_seat_id"] = ""
+            self.state["current_message"] = f"进入阶段 `{stage}`"
+            self.state["updated_at"] = utc_now_iso()
             write_json(self.status_path, self.state)
 
     def set_lane_status(self, lane_id: str, status: str) -> None:
@@ -932,11 +1096,36 @@ class RunTracker:
             self.state["failed_lane_count"] = sum(
                 1 for value in self.state["lane_statuses"].values() if value == "failed"
             )
+            self.state["running_seat_ids"] = [
+                current_lane_id for current_lane_id, current_status in self.state["lane_statuses"].items() if current_status == "running"
+            ]
+            self.state["current_seat_id"] = lane_id if status == "running" else (self.state["running_seat_ids"][0] if self.state["running_seat_ids"] else "")
+            self.state["current_message"] = f"{lane_id} => {status}"
+            self.state["updated_at"] = utc_now_iso()
             write_json(self.status_path, self.state)
 
     def add_artifact(self, key: str, value: str) -> None:
         with self.lock:
             self.state["artifacts"][key] = value
+            self.state["updated_at"] = utc_now_iso()
+            write_json(self.status_path, self.state)
+
+    def touch(self, *, message: str, seat_id: str = "") -> None:
+        with self.lock:
+            self.state["current_message"] = message
+            if seat_id:
+                self.state["current_seat_id"] = seat_id
+            self.state["updated_at"] = utc_now_iso()
+            write_json(self.status_path, self.state)
+
+    def update_watcher(self, payload: dict[str, Any]) -> None:
+        with self.lock:
+            self.state["watcher_enabled"] = bool(payload.get("watcher_enabled", self.state["watcher_enabled"]))
+            self.state["watcher_state"] = str(payload.get("watcher_state", self.state["watcher_state"]))
+            self.state["watcher_alert_count"] = int(payload.get("watcher_alert_count", self.state["watcher_alert_count"]))
+            self.state["watcher_action_count"] = int(payload.get("watcher_action_count", self.state["watcher_action_count"]))
+            self.state["watcher_last_message"] = str(payload.get("watcher_last_message", self.state["watcher_last_message"]))
+            self.state["updated_at"] = utc_now_iso()
             write_json(self.status_path, self.state)
 
     def complete(self, status: str) -> None:
@@ -944,6 +1133,10 @@ class RunTracker:
             self.state["status"] = status
             self.state["stage"] = "completed" if status == "success" else "failed"
             self.state["finished_at"] = utc_now_iso()
+            self.state["running_seat_ids"] = []
+            self.state["current_seat_id"] = ""
+            self.state["current_message"] = f"run => {status}"
+            self.state["updated_at"] = self.state["finished_at"]
             write_json(self.status_path, self.state)
 
 
@@ -956,35 +1149,87 @@ class SolutionFactory:
         self.current_run_id = ""
         self.current_output_dir = Path(".")
 
-    def _select_lanes(self, lanes: str) -> list[LaneSpec]:
-        if lanes not in LANE_PRESETS:
-            raise ValueError("supported lane sets are default, default6, default9, default10")
-        allowed_lane_ids = set(LANE_PRESETS[lanes])
-        return [lane for lane in DEFAULT_LANES if lane.id in allowed_lane_ids]
+    def _select_lanes(self, lanes: str) -> tuple[str, list[LaneSpec]]:
+        normalized_profile = normalize_lane_profile(lanes)
+        allowed_lane_ids = set(LANE_PRESETS[normalized_profile])
+        return normalized_profile, [lane for lane in DEFAULT_LANES if lane.id in allowed_lane_ids]
 
-    def _prepare_run(self, brief_path: Path, lane_specs: list[LaneSpec]) -> tuple[str, Path, Path, dict[str, Any]]:
+    def _preflight_lanes(
+        self,
+        *,
+        requested_profile: str,
+        requested_lanes: list[LaneSpec],
+    ) -> tuple[str, list[LaneSpec], dict[str, Any]]:
+        family_availability: dict[str, dict[str, str]] = {}
+        unavailable_families: dict[str, str] = {}
+        for family in sorted({lane.family for lane in requested_lanes}):
+            try:
+                prefix = resolve_command_prefix(family, workspace_root=self.workspace_root, command_overrides=self.config.command_overrides)
+                family_availability[family] = {"status": "ready", "detail": " ".join(prefix)}
+            except Exception as exc:
+                unavailable_families[family] = str(exc)
+                family_availability[family] = {"status": "missing", "detail": str(exc)}
+
+        effective_profile = requested_profile
+        effective_lanes = list(requested_lanes)
+        unavailable_lane_ids = [lane.id for lane in requested_lanes if lane.family in unavailable_families]
+        issues: list[dict[str, str]] = []
+
+        if requested_profile == "standard10" and set(unavailable_families) == {"opencode"}:
+            effective_profile = "reduced6"
+            effective_lanes = [lane for lane in DEFAULT_LANES if lane.id in REDUCED6_LANE_IDS]
+            issues.append(
+                {
+                    "code": "profile_degraded",
+                    "message": "standard10 请求中缺少 opencode 可执行链路，已自动降级为 reduced6 以保证真实会议先可运行。",
+                }
+            )
+
+        for family, error_text in unavailable_families.items():
+            issues.append(
+                {
+                    "code": "provider_unavailable",
+                    "message": f"{family} family 当前不可用：{error_text}",
+                }
+            )
+
+        return effective_profile, effective_lanes, {
+            "requested_lane_profile": requested_profile,
+            "effective_lane_profile": effective_profile,
+            "unavailable_lane_ids": unavailable_lane_ids,
+            "family_availability": family_availability,
+            "issues": issues,
+        }
+
+    def _prepare_run(
+        self,
+        brief_path: Path,
+        *,
+        requested_profile: str,
+        effective_profile: str,
+        lane_specs: list[LaneSpec],
+        preflight: dict[str, Any],
+    ) -> tuple[str, Path, Path, dict[str, Any]]:
         run_id = f"sf-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
         run_dir = ensure_directory(self.cache_root / "runs" / run_id)
         output_segments = split_project_path(self.config.project_path)
-        if self.config.append_factory_dir:
+        if self.config.append_factory_dir and (not output_segments or output_segments[-1] != "方案工厂"):
             output_segments.append("方案工厂")
         output_segments.append(run_id)
         output_dir = ensure_directory(self.obsidian_root.joinpath(*output_segments))
         manifest = {
             "run_id": run_id,
+            "owner_pid": os.getpid(),
             "brief_path": str(brief_path),
             "project_path": self.config.project_path,
             "append_factory_dir": self.config.append_factory_dir,
-            "lanes": [
-                {
-                    "id": lane.id,
-                    "source_cli": lane.source_cli,
-                    "family": lane.family,
-                    "model": lane.model,
-                    "obsidian_filename": lane.obsidian_filename,
-                }
-                for lane in lane_specs
-            ],
+            "requested_lane_profile": requested_profile,
+            "effective_lane_profile": effective_profile,
+            "parallel_policy": "strict_all",
+            "quorum_profile": "strict-all",
+            "preflight": preflight,
+            "lanes": [lane_manifest_payload(lane) for lane in lane_specs],
+            "seats": [lane_manifest_payload(lane) for lane in lane_specs],
             "started_at": utc_now_iso(),
             "timeouts": {"lane_timeout_sec": self.config.timeout_sec},
             "retry_policy": {"attempts": self.config.retry_attempts},
@@ -997,6 +1242,7 @@ class SolutionFactory:
             "obsidian_output_dir": str(output_dir),
         }
         write_json(run_dir / "run_manifest.json", manifest)
+        write_json(run_dir / "preflight.json", preflight)
         return run_id, run_dir, output_dir, manifest
 
     def _run_subprocess(self, prepared: PreparedCommand, *, timeout_sec: int) -> subprocess.CompletedProcess[str]:
@@ -1132,6 +1378,10 @@ class SolutionFactory:
                 ).strip()
                 if not raw_output:
                     raise RuntimeError("command completed without a usable final message")
+                raw_output = trim_to_canonical_markdown(raw_output)
+                quality_issue = variant_quality_issue(lane, raw_output)
+                if quality_issue:
+                    raise RuntimeError(f"quality gate failed: {quality_issue}")
 
                 raw_output_path = lane_run_dir / "raw-output.txt"
                 write_text(raw_output_path, raw_output)
@@ -1340,128 +1590,266 @@ class SolutionFactory:
         tracker.emit("fusion-step-success", stage=stage, provider=provider_used, output=str(output_last_message_path))
         return payload, provider_used, model_used
 
-    def run(self, *, brief_path: Path, lanes: str = "default6") -> dict[str, Any]:
-        lane_specs = self._select_lanes(lanes)
+    def run(self, *, brief_path: Path, lanes: str = "standard10", watcher_mode: str | None = None) -> dict[str, Any]:
+        recover_abandoned_runs(self.cache_root)
+        requested_profile, requested_lanes = self._select_lanes(lanes)
         brief_path = brief_path.expanduser().resolve()
         brief_text = brief_path.read_text(encoding="utf-8")
+        effective_profile, lane_specs, preflight = self._preflight_lanes(
+            requested_profile=requested_profile,
+            requested_lanes=requested_lanes,
+        )
+        if not lane_specs:
+            raise RuntimeError("preflight resolved zero runnable lanes")
 
-        run_id, run_dir, output_dir, manifest = self._prepare_run(brief_path, lane_specs)
+        run_id, run_dir, output_dir, manifest = self._prepare_run(
+            brief_path,
+            requested_profile=requested_profile,
+            effective_profile=effective_profile,
+            lane_specs=lane_specs,
+            preflight=preflight,
+        )
         self.current_run_id = run_id
         self.current_output_dir = output_dir
         tracker = RunTracker(run_dir, manifest)
-        tracker.set_stage("brief")
-
-        write_text(output_dir / "00-brief.md", render_brief_markdown(brief_text, run_id=run_id, created_at=manifest["started_at"]))
-        tracker.add_artifact("brief_markdown", str(output_dir / "00-brief.md"))
-        tracker.set_stage("variants")
+        tracker.add_artifact("preflight_json", str(run_dir / "preflight.json"))
+        watcher_active = watcher_enabled(watcher_mode or self.config.watcher_policy.cli_mode, task_kind="run")
+        watcher_recorder: WatcherRecorder | None = None
+        watcher_monitor: WatcherMonitor | None = None
+        if watcher_active:
+            watcher_recorder = WatcherRecorder(
+                run_dir=run_dir,
+                output_dir=output_dir,
+                policy=self.config.watcher_policy,
+                status_updater=tracker.update_watcher,
+            )
+            watcher_recorder.set_state("watching", "觉者已启用，正在代表用户观察本地真实议会执行链。")
+            watcher_monitor = WatcherMonitor(
+                recorder=watcher_recorder,
+                status_provider=tracker.snapshot_payload,
+                events_path=tracker.events_path,
+                target_dir_provider=lambda target_id: run_dir / "lanes" / target_id,
+                task_label="lane",
+                heartbeat_sec=max(1, min(self.config.watcher_policy.seat_stall_threshold_sec, self.config.watcher_policy.stage_silent_threshold_sec, 5)),
+            )
+            watcher_monitor.start()
+            for issue in preflight.get("issues", []):
+                issue_code = str(issue.get("code", "")).strip()
+                if issue_code in {"provider_unavailable", "profile_degraded"}:
+                    watcher_recorder.alert(
+                        trigger_code=issue_code,
+                        stage="preflight",
+                        target_id="",
+                        severity="warning",
+                        observation=str(issue.get("message", "")).strip(),
+                        recommendation="觉者建议先修复 provider 链路；若系统已定义安全降级路径，可保留降级留痕后继续运行。",
+                        suggested_next_step="核对 preflight 输出与 provider 发现结果。",
+                    )
+                    if issue_code == "profile_degraded":
+                        watcher_recorder.action(
+                            trigger_code=issue_code,
+                            stage="preflight",
+                            target_id="",
+                            executed_action="controlled_degrade",
+                            result="success",
+                            observation=str(issue.get("message", "")).strip(),
+                            recommendation="已记录受控降级，当前 run 不再伪装为完整 standard10。",
+                        )
 
         lane_results: list[LaneResult] = []
-        max_workers = max(1, min(self.config.max_workers, len(lane_specs)))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(
-                    self._execute_lane,
-                    lane,
-                    run_id=run_id,
-                    brief_text=brief_text,
-                    run_dir=run_dir,
-                    output_dir=output_dir,
-                    tracker=tracker,
-                )
-                for lane in lane_specs
-            ]
-            for future in concurrent.futures.as_completed(futures):
-                lane_results.append(future.result())
-        lane_results.sort(key=lambda item: item.lane.obsidian_filename)
-
-        fusion_dir = ensure_directory(run_dir / "fusion")
-        fusion_context = self._build_fusion_context(lane_results)
-        write_json(fusion_dir / "fusion_context.json", fusion_context)
-        tracker.add_artifact("fusion_context", str(fusion_dir / "fusion_context.json"))
-        tracker.set_stage("fusion")
-
-        idea_map_text = self._run_fusion_text_step(
-            stage="idea-map",
-            prompt=build_idea_map_prompt(fusion_context),
-            fusion_dir=fusion_dir,
-            tracker=tracker,
-            filename="30-idea-map.md",
-        )
-        debate_round_1_text = self._run_fusion_text_step(
-            stage="debate-round-1",
-            prompt=build_debate_round_prompt(
-                round_index=1,
-                fusion_context=fusion_context,
-                idea_map_text=idea_map_text,
-            ),
-            fusion_dir=fusion_dir,
-            tracker=tracker,
-            filename="40-debate-round-1.md",
-        )
-        debate_round_2_text = self._run_fusion_text_step(
-            stage="debate-round-2",
-            prompt=build_debate_round_prompt(
-                round_index=2,
-                fusion_context=fusion_context,
-                idea_map_text=idea_map_text,
-                previous_round_text=debate_round_1_text,
-            ),
-            fusion_dir=fusion_dir,
-            tracker=tracker,
-            filename="41-debate-round-2.md",
-        )
-
-        final_decisions, decisions_source_cli, decisions_model = self._run_fusion_json_step(
-            stage="final-decisions",
-            prompt=build_final_decisions_prompt(
-                fusion_context,
-                idea_map_text=idea_map_text,
-                debate_round_1_text=debate_round_1_text,
-                debate_round_2_text=debate_round_2_text,
-            ),
-            schema=FINAL_DECISIONS_SCHEMA,
-            fusion_dir=fusion_dir,
-            tracker=tracker,
-        )
-        write_json(fusion_dir / "final_decisions.json", final_decisions)
-        write_text(
-            output_dir / "50-fusion-decisions.md",
-            render_decisions_markdown(
-                final_decisions,
-                run_id=run_id,
-                created_at=utc_now_iso(),
-                source_cli=decisions_source_cli,
-                model=decisions_model,
-            ),
-        )
-
-        final_draft, final_draft_source_cli, final_draft_model = self._run_fusion_json_step(
-            stage="final-draft",
-            prompt=build_final_draft_prompt(fusion_context, decisions_payload=final_decisions),
-            schema=FINAL_DRAFT_SCHEMA,
-            fusion_dir=fusion_dir,
-            tracker=tracker,
-        )
-        write_text(
-            output_dir / "90-final-solution-draft.md",
-            render_final_draft_markdown(
-                final_draft,
-                run_id=run_id,
-                created_at=utc_now_iso(),
-                source_cli=final_draft_source_cli,
-                model=final_draft_model,
-            ),
-        )
-        write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results))
-
-        tracker.complete("success")
-        summary = {
+        summary: dict[str, Any] = {
             "run_id": run_id,
-            "status": "success",
+            "status": "failed",
             "run_dir": str(run_dir),
             "obsidian_output_dir": str(output_dir),
-            "failed_lane_count": sum(1 for result in lane_results if result.status == "failed"),
+            "requested_lane_profile": requested_profile,
+            "effective_lane_profile": effective_profile,
+            "parallel_policy": "strict_all",
+            "quorum_profile": "strict-all",
+            "quorum_reached": False,
+            "ghosted_lane_ids": [],
+            "late_lane_ids": [],
+            "failed_lane_count": 0,
+            "reason_codes": [],
+            "watcher_enabled": watcher_active,
+            "watcher_status": "watching" if watcher_active else "off",
+            "watcher_alert_count": 0,
+            "watcher_action_count": 0,
         }
+
+        try:
+            tracker.set_stage("brief")
+            write_text(output_dir / "00-brief.md", render_brief_markdown(brief_text, run_id=run_id, created_at=manifest["started_at"]))
+            tracker.add_artifact("brief_markdown", str(output_dir / "00-brief.md"))
+            write_text(output_dir / "05-preflight.md", render_preflight_markdown(preflight, run_id=run_id, created_at=utc_now_iso()))
+            tracker.add_artifact("preflight_markdown", str(output_dir / "05-preflight.md"))
+            tracker.set_stage("variants")
+
+            max_workers = max(1, min(self.config.max_workers, len(lane_specs)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(
+                        self._execute_lane,
+                        lane,
+                        run_id=run_id,
+                        brief_text=brief_text,
+                        run_dir=run_dir,
+                        output_dir=output_dir,
+                        tracker=tracker,
+                    )
+                    for lane in lane_specs
+                ]
+                for future in concurrent.futures.as_completed(futures):
+                    lane_results.append(future.result())
+            lane_results.sort(key=lambda item: item.lane.obsidian_filename)
+
+            fusion_dir = ensure_directory(run_dir / "fusion")
+            fusion_context = self._build_fusion_context(lane_results)
+            write_json(fusion_dir / "fusion_context.json", fusion_context)
+            tracker.add_artifact("fusion_context", str(fusion_dir / "fusion_context.json"))
+            tracker.set_stage("fusion")
+
+            idea_map_text = self._run_fusion_text_step(
+                stage="idea-map",
+                prompt=build_idea_map_prompt(fusion_context),
+                fusion_dir=fusion_dir,
+                tracker=tracker,
+                filename="30-idea-map.md",
+            )
+            debate_round_1_text = self._run_fusion_text_step(
+                stage="debate-round-1",
+                prompt=build_debate_round_prompt(
+                    round_index=1,
+                    fusion_context=fusion_context,
+                    idea_map_text=idea_map_text,
+                ),
+                fusion_dir=fusion_dir,
+                tracker=tracker,
+                filename="40-debate-round-1.md",
+            )
+            debate_round_2_text = self._run_fusion_text_step(
+                stage="debate-round-2",
+                prompt=build_debate_round_prompt(
+                    round_index=2,
+                    fusion_context=fusion_context,
+                    idea_map_text=idea_map_text,
+                    previous_round_text=debate_round_1_text,
+                ),
+                fusion_dir=fusion_dir,
+                tracker=tracker,
+                filename="41-debate-round-2.md",
+            )
+
+            final_decisions, decisions_source_cli, decisions_model = self._run_fusion_json_step(
+                stage="final-decisions",
+                prompt=build_final_decisions_prompt(
+                    fusion_context,
+                    idea_map_text=idea_map_text,
+                    debate_round_1_text=debate_round_1_text,
+                    debate_round_2_text=debate_round_2_text,
+                ),
+                schema=FINAL_DECISIONS_SCHEMA,
+                fusion_dir=fusion_dir,
+                tracker=tracker,
+            )
+            write_json(fusion_dir / "final_decisions.json", final_decisions)
+            write_text(
+                output_dir / "50-fusion-decisions.md",
+                render_decisions_markdown(
+                    final_decisions,
+                    run_id=run_id,
+                    created_at=utc_now_iso(),
+                    source_cli=decisions_source_cli,
+                    model=decisions_model,
+                ),
+            )
+
+            final_draft, final_draft_source_cli, final_draft_model = self._run_fusion_json_step(
+                stage="final-draft",
+                prompt=build_final_draft_prompt(fusion_context, decisions_payload=final_decisions),
+                schema=FINAL_DRAFT_SCHEMA,
+                fusion_dir=fusion_dir,
+                tracker=tracker,
+            )
+            write_text(
+                output_dir / "90-final-solution-draft.md",
+                render_final_draft_markdown(
+                    final_draft,
+                    run_id=run_id,
+                    created_at=utc_now_iso(),
+                    source_cli=final_draft_source_cli,
+                    model=final_draft_model,
+                ),
+            )
+            write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results))
+
+            tracker.complete("success")
+            summary["status"] = "success"
+        except Exception as exc:
+            error_text = str(exc).strip() or exc.__class__.__name__
+            write_text(run_dir / "98-error.txt", error_text + "\n")
+            write_text(output_dir / "98-error.md", f"# 运行失败\n\n```\n{error_text}\n```\n")
+            tracker.emit("run-error", stage=tracker.state.get("stage", ""), error=error_text)
+            if watcher_recorder is not None:
+                watcher_recorder.alert(
+                    trigger_code="fusion_failed" if tracker.state.get("stage") == "fusion" else "seat_failed",
+                    stage=str(tracker.state.get("stage", "")),
+                    target_id=str(tracker.state.get("current_seat_id", "")),
+                    severity="error",
+                    observation=error_text,
+                    recommendation="觉者建议优先保留失败工件与当前收尾状态，不再继续盲目推进后续阶段。",
+                    suggested_next_step="检查 98-error、对应 lane/fusion 日志与 watcher 工件。",
+                )
+                watcher_recorder.action(
+                    trigger_code="run_interrupted" if "interrupt" in error_text.lower() else "fusion_failed",
+                    stage=str(tracker.state.get("stage", "")),
+                    target_id=str(tracker.state.get("current_seat_id", "")),
+                    executed_action="finalize_failed_run",
+                    result="success",
+                    observation=error_text,
+                    recommendation="已补写失败收尾状态与错误工件。",
+                )
+            tracker.complete("failed")
+            summary["error"] = error_text
+        finally:
+            summary["failed_lane_count"] = sum(1 for result in lane_results if result.status == "failed")
+            write_json(run_dir / "summary.json", summary)
+
+        from pijiang.factory.analysis import audit_council_run
+
+        audit = audit_council_run(
+            summary,
+            source_system="local_council",
+            verification_command="python -m tools.solution_factory run --brief <brief> --project-path <project> --lanes <profile>",
+        )
+        summary["truth_audit_path"] = str(output_dir / "70-run-truth-audit.json")
+        summary["audit_status"] = audit.audit_status
+        summary["reason_codes"] = audit.reason_codes
+        summary["fake_success_flag_count"] = len(audit.fake_success_flags)
+        summary["regression_case_count"] = len(audit.regression_case_paths)
+        if summary["status"] == "success" and audit.audit_status != "success":
+            summary["status"] = audit.audit_status
+        if watcher_recorder is not None:
+            if watcher_monitor is not None:
+                watcher_monitor.stop()
+            watcher_path = watcher_recorder.finalize(
+                expected_artifacts={
+                    "brief": output_dir / "00-brief.md",
+                    "preflight": output_dir / "05-preflight.md",
+                    "idea_map": output_dir / "30-idea-map.md",
+                    "debate_round_1": output_dir / "40-debate-round-1.md",
+                    "debate_round_2": output_dir / "41-debate-round-2.md",
+                    "final_decisions": output_dir / "50-fusion-decisions.md",
+                    "truth_audit": output_dir / "70-run-truth-audit.json",
+                    "final_draft": output_dir / "90-final-solution-draft.md",
+                }
+            )
+            tracker.add_artifact("watcher_advice", watcher_path)
+            summary["watcher_status"] = tracker.state.get("watcher_state", "completed")
+            summary["watcher_alert_count"] = int(tracker.state.get("watcher_alert_count", 0))
+            summary["watcher_action_count"] = int(tracker.state.get("watcher_action_count", 0))
+            summary["watcher_advice_path"] = watcher_path
+            write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results, watcher_filename="06-juezhe-watch.md"))
         write_json(run_dir / "summary.json", summary)
         return summary
 
@@ -1473,14 +1861,16 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="Run the solution factory.")
     run.add_argument("--brief", required=True, help="Absolute path to the brief markdown file.")
     run.add_argument("--project-path", required=True, help="Obsidian project path relative to the vault root.")
-    run.add_argument("--lanes", default="default10", help="Lane set to run. Supported: default, default6, default9, default10.")
+    run.add_argument("--lanes", default="standard10", help="Lane set to run. Supported: single, reduced6, standard10, default, default6, default9, default10.")
+    run.add_argument("--watcher", choices=["auto", "on", "off"], default="auto", help="觉者守护层策略。")
     run.set_defaults(func=command_run)
     return parser
 
 
 def command_run(args: argparse.Namespace) -> int:
     config = default_config(args.project_path)
-    summary = SolutionFactory(config).run(brief_path=Path(args.brief), lanes=args.lanes)
+    config.watcher_policy.cli_mode = args.watcher
+    summary = SolutionFactory(config).run(brief_path=Path(args.brief), lanes=args.lanes, watcher_mode=args.watcher)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

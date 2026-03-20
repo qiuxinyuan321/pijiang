@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ from .runtime_support import (
 from .config import PijiangConfig, active_seats, council_mode, find_provider, unique_active_profile_count
 from .providers import ProviderExecutionError, adapter_for_profile, execute_profile_request
 from .types import CouncilSeat, ExecutionRequest, RunProgressSnapshot
+from .watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, watcher_enabled
 
 
 ProgressCallback = Callable[[RunProgressSnapshot, dict[str, Any]], None]
@@ -274,6 +276,7 @@ class CouncilRunTracker:
         self.progress_callback = progress_callback
         self.state: dict[str, Any] = {
             "run_id": manifest["run_id"],
+            "owner_pid": manifest.get("owner_pid", 0),
             "status": "running",
             "stage": "bootstrap",
             "started_at": manifest["started_at"],
@@ -293,6 +296,11 @@ class CouncilRunTracker:
             "quorum_reached_at": "",
             "fusion_cutover_ms": 0,
             "updated_at": manifest["started_at"],
+            "watcher_enabled": False,
+            "watcher_state": "idle",
+            "watcher_alert_count": 0,
+            "watcher_action_count": 0,
+            "watcher_last_message": "",
             "artifacts": {},
         }
         write_json(self.status_path, self.state)
@@ -313,8 +321,17 @@ class CouncilRunTracker:
             ghosted_seat_ids=list(self.state["ghosted_seat_ids"]),
             late_seat_ids=list(self.state["late_seat_ids"]),
             parallel_policy=str(self.state["parallel_policy"]),
+            watcher_enabled=bool(self.state["watcher_enabled"]),
+            watcher_state=str(self.state["watcher_state"]),
+            watcher_alert_count=int(self.state["watcher_alert_count"]),
+            watcher_action_count=int(self.state["watcher_action_count"]),
+            watcher_last_message=str(self.state["watcher_last_message"]),
             artifacts=dict(self.state["artifacts"]),
         )
+
+    def snapshot_payload(self) -> dict[str, Any]:
+        with self.lock:
+            return dict(self.state)
 
     def _emit_progress(self, event: dict[str, Any]) -> None:
         if self.progress_callback is not None:
@@ -395,6 +412,19 @@ class CouncilRunTracker:
             self.state["updated_at"] = utc_now_iso()
             write_json(self.status_path, self.state)
 
+    def set_current_message(self, message: str, *, seat_id: str = "") -> None:
+        self.touch(message=message, seat_id=seat_id)
+
+    def update_watcher(self, payload: dict[str, Any]) -> None:
+        with self.lock:
+            self.state["watcher_enabled"] = bool(payload.get("watcher_enabled", self.state["watcher_enabled"]))
+            self.state["watcher_state"] = str(payload.get("watcher_state", self.state["watcher_state"]))
+            self.state["watcher_alert_count"] = int(payload.get("watcher_alert_count", self.state["watcher_alert_count"]))
+            self.state["watcher_action_count"] = int(payload.get("watcher_action_count", self.state["watcher_action_count"]))
+            self.state["watcher_last_message"] = str(payload.get("watcher_last_message", self.state["watcher_last_message"]))
+            self.state["updated_at"] = utc_now_iso()
+            write_json(self.status_path, self.state)
+
     def complete(self, status: str, message: str) -> None:
         with self.lock:
             self.state["status"] = status
@@ -453,6 +483,7 @@ class CouncilEngine:
         quorum_profile = _quorum_profile(parallel_policy)
         manifest = {
             "run_id": run_id,
+            "owner_pid": os.getpid() if hasattr(os, "getpid") else 0,
             "brief_path": str(brief_path),
             "project_path": topic,
             "started_at": created_at,
@@ -813,7 +844,9 @@ class CouncilEngine:
         topic: str,
         timeout_sec: int = 900,
         max_workers: int = 6,
+        watcher_mode: str | None = None,
     ) -> dict[str, Any]:
+        recover_abandoned_runs(Path(self.config.cache_root))
         seats = self._active_seats()
         brief_path = brief_path.expanduser().resolve()
         brief_text = brief_path.read_text(encoding="utf-8")
@@ -822,6 +855,27 @@ class CouncilEngine:
 
         run_id, run_dir, output_dir, manifest = self._prepare_run(brief_path, seats, topic)
         tracker = CouncilRunTracker(run_dir=run_dir, manifest=manifest, seats=seats, progress_callback=self.progress_callback)
+        watcher_active = watcher_enabled(watcher_mode or self.config.watcher_policy.cli_mode, task_kind="run")
+        watcher_recorder: WatcherRecorder | None = None
+        watcher_monitor: WatcherMonitor | None = None
+        if watcher_active:
+            watcher_policy = self.config.watcher_policy
+            watcher_recorder = WatcherRecorder(
+                run_dir=run_dir,
+                output_dir=output_dir,
+                policy=watcher_policy,
+                status_updater=tracker.update_watcher,
+            )
+            watcher_recorder.set_state("watching", "觉者已启用，正在代表用户观察整条任务执行链。")
+            watcher_monitor = WatcherMonitor(
+                recorder=watcher_recorder,
+                status_provider=tracker.snapshot_payload,
+                events_path=tracker.events_path,
+                target_dir_provider=lambda target_id: run_dir / "seats" / target_id,
+                task_label="seat",
+                heartbeat_sec=max(1, min(self.config.watcher_policy.seat_stall_threshold_sec, self.config.watcher_policy.stage_silent_threshold_sec, 5)),
+            )
+            watcher_monitor.start()
         parallel_policy = str(manifest.get("parallel_policy", "strict_all"))
         quorum_profile = str(manifest.get("quorum_profile", "strict-all"))
         tracker.set_stage("brief", "正在写入 brief 与运行概览")
@@ -945,6 +999,25 @@ class CouncilEngine:
             write_text(output_dir / "98-error.md", f"# Fusion Error\n\n阶段：`critical-quorum`\n\n```\n{pipeline_error}\n```\n")
             tracker.emit("quorum-failed", stage="variants", message=pipeline_error)
             tracker.set_current_message("关键 quorum 未满足，已拒绝进入融合。", seat_id="")
+            if watcher_recorder is not None:
+                watcher_recorder.alert(
+                    trigger_code="critical_quorum_missing",
+                    stage="variants",
+                    target_id="fusion",
+                    severity="error",
+                    observation="主议会在变体阶段结束后仍未达到法定人数，无法进入合法融合。",
+                    recommendation="觉者建议优先检查关键席位是否失败、被隔离或 provider 不可用。",
+                    suggested_next_step="查看 ghosted/failed seat 与 preflight 结果，再决定是否重试。",
+                )
+                watcher_recorder.action(
+                    trigger_code="critical_quorum_missing",
+                    stage="variants",
+                    target_id="fusion",
+                    executed_action="finalize_failed_run",
+                    result="success",
+                    observation=pipeline_error,
+                    recommendation="已保留失败收尾，不再继续盲目融合。",
+                )
         else:
             tracker.set_stage("fusion", "变体完成，正在开始 idea map 与多轮融合")
             idea_map_text, _, _ = self._execute_fusion(
@@ -1056,6 +1129,10 @@ class CouncilEngine:
             "late_result_count": len(sorted(set(late_seat_ids))),
             "late_lane_ids": sorted(set(late_seat_ids)),
             "fusion_cutover_ms": fusion_cutover_ms,
+            "watcher_enabled": watcher_active,
+            "watcher_status": tracker.state.get("watcher_state", "idle"),
+            "watcher_alert_count": int(tracker.state.get("watcher_alert_count", 0)),
+            "watcher_action_count": int(tracker.state.get("watcher_action_count", 0)),
         }
         if pipeline_error:
             summary["error"] = pipeline_error
@@ -1073,6 +1150,26 @@ class CouncilEngine:
             summary["status"] = audit.audit_status
         tracker.add_artifact("truth_audit", summary["truth_audit_path"])
         tracker.add_artifact("regression_cases_index", str(output_dir / "80-regression-cases-index.md"))
+        if watcher_recorder is not None:
+            if watcher_monitor is not None:
+                watcher_monitor.stop()
+            watcher_path = watcher_recorder.finalize(
+                expected_artifacts={
+                    "brief": output_dir / "00-brief.md",
+                    "idea_map": output_dir / "30-idea-map.md",
+                    "debate_round_1": output_dir / "40-debate-round-1.md",
+                    "debate_round_2": output_dir / "41-debate-round-2.md",
+                    "final_decisions": output_dir / "50-fusion-decisions.md",
+                    "truth_audit": output_dir / "70-run-truth-audit.json",
+                    "final_draft": output_dir / "90-final-solution-draft.md",
+                }
+            )
+            tracker.add_artifact("watcher_advice", watcher_path)
+            summary["watcher_status"] = tracker.state.get("watcher_state", "completed")
+            summary["watcher_alert_count"] = int(tracker.state.get("watcher_alert_count", 0))
+            summary["watcher_action_count"] = int(tracker.state.get("watcher_action_count", 0))
+            summary["watcher_advice_path"] = watcher_path
+            write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results, watcher_filename="06-juezhe-watch.md"))
         if summary["status"] != pipeline_status:
             tracker.complete(summary["status"], f"议会运行完成，状态为 {summary['status']}")
         write_json(run_dir / "summary.json", summary)

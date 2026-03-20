@@ -36,6 +36,18 @@
     - `ghosted_lane_ids`
     - `late_lane_ids`
     - `fusion_cutover_ms`
+- `觉者` 守护层
+  - 当前 `cpj run` 与 `tools.solution_factory run` 可启用 `watcher`
+  - `watcher` 代表用户身份盯整条任务执行链的稳定性，而不是加入主议会投票
+  - 当前会显式留痕：
+    - `watcher/watcher-events.jsonl`
+    - `watcher/watcher-alerts.json`
+    - `watcher/watcher-actions.json`
+    - `06-juezhe-watch.md`
+  - 当前默认负责：
+    - 卡顿/静默告警
+    - 上次中断 run 的失败收尾修复
+    - 受控降级与运行异常建议
 
 ## 当前不宣称完成的能力
 
@@ -120,6 +132,7 @@
 - budget / circuit breaker / fallback replacement
 - 本地议会的字节级 subprocess streaming
 - 任何未经过 benchmark gate 的前沿试验能力
+- 觉者对内容层正文的直接改写权
 
 ## 幽灵堵车隔离语义
 

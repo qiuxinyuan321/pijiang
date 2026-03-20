@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -7,15 +8,18 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import tools.solution_factory.core as solution_factory_core
 from tools.solution_factory import DEFAULT_LANES, SolutionFactory, SolutionFactoryConfig
 
 
 def write_fake_cli(path: Path) -> None:
     path.write_text(
-        """from __future__ import annotations
+"""from __future__ import annotations
 import json
+import os
 import re
 import sys
+import time
 from pathlib import Path
 
 def read_prompt() -> str:
@@ -112,6 +116,10 @@ def build_body(stage: str, lane: str) -> str:
 prompt = read_prompt()
 stage = extract_marker(prompt, "SF-STAGE", "variant")
 lane = extract_marker(prompt, "SF-LANE-ID", "codex-gpt")
+slow_lanes = {item.strip() for item in os.environ.get("PIJIANG_FAKE_SLOW_LANES", "").split(",") if item.strip()}
+slow_sec = float(os.environ.get("PIJIANG_FAKE_SLOW_SEC", "0").strip() or "0")
+if slow_lanes and lane in slow_lanes:
+    time.sleep(slow_sec)
 body = build_body(stage, lane)
 output_path = get_option("--output-last-message")
 if output_path:
@@ -147,16 +155,24 @@ def test_solution_factory_can_run_with_fake_clis(tmp_path: Path) -> None:
     )
     config.workspace_root.mkdir(parents=True, exist_ok=True)
 
-    summary = SolutionFactory(config).run(brief_path=brief_path, lanes="default6")
+    summary = SolutionFactory(config).run(brief_path=brief_path, lanes="reduced6")
 
     output_dir = Path(summary["obsidian_output_dir"])
     assert summary["failed_lane_count"] == 0
+    assert summary["requested_lane_profile"] == "reduced6"
+    assert summary["effective_lane_profile"] == "reduced6"
+    assert summary["truth_audit_path"].endswith("70-run-truth-audit.json")
+    assert summary["watcher_enabled"] is True
+    assert summary["watcher_advice_path"].endswith("06-juezhe-watch.md")
     assert (output_dir / "00-brief.md").exists()
+    assert (output_dir / "05-preflight.md").exists()
+    assert (output_dir / "06-juezhe-watch.md").exists()
     assert (output_dir / "30-idea-map.md").exists()
     assert (output_dir / "40-debate-round-1.md").exists()
     assert (output_dir / "41-debate-round-2.md").exists()
     assert (output_dir / "50-fusion-decisions.md").exists()
     assert (output_dir / "90-final-solution-draft.md").exists()
+    assert (output_dir / "70-run-truth-audit.json").exists()
     assert (output_dir / "99-index.md").exists()
 
 
@@ -169,6 +185,106 @@ def test_lane_presets_match_expected_sizes(tmp_path: Path) -> None:
     )
     factory = SolutionFactory(config)
 
-    assert len(factory._select_lanes("default6")) == 6
-    assert len(factory._select_lanes("default9")) == 9
-    assert len(factory._select_lanes("default10")) == len(DEFAULT_LANES)
+    assert factory._select_lanes("single")[0] == "single"
+    assert len(factory._select_lanes("single")[1]) == 1
+    assert factory._select_lanes("default6")[0] == "reduced6"
+    assert len(factory._select_lanes("default6")[1]) == 6
+    assert len(factory._select_lanes("default9")[1]) == 9
+    assert factory._select_lanes("default10")[0] == "standard10"
+    assert len(factory._select_lanes("default10")[1]) == len(DEFAULT_LANES)
+
+
+def test_resolve_command_prefix_uses_real_binary_path(monkeypatch, tmp_path: Path) -> None:
+    def fake_which(name: str) -> str | None:
+        if name == "codex":
+            return r"C:\Tools\codex.CMD"
+        if name == "claude":
+            return r"C:\Tools\claude.EXE"
+        return None
+
+    monkeypatch.setattr(solution_factory_core.shutil, "which", fake_which)
+
+    assert solution_factory_core.resolve_command_prefix("codex", workspace_root=tmp_path) == [r"C:\Tools\codex.CMD"]
+    assert solution_factory_core.resolve_command_prefix("claude", workspace_root=tmp_path) == [r"C:\Tools\claude.EXE"]
+
+
+def test_preflight_degrades_standard10_to_reduced6_when_opencode_missing(monkeypatch, tmp_path: Path) -> None:
+    def fake_which(name: str) -> str | None:
+        if name == "codex":
+            return r"C:\Tools\codex.CMD"
+        if name == "claude":
+            return r"C:\Tools\claude.EXE"
+        return None
+
+    monkeypatch.setattr(solution_factory_core.shutil, "which", fake_which)
+    monkeypatch.setattr(solution_factory_core, "_find_bun_cached_opencode", lambda: None)
+
+    config = SolutionFactoryConfig(
+        workspace_root=tmp_path / "workspace",
+        cache_root=tmp_path / "cache",
+        obsidian_root=tmp_path / "obsidian",
+        project_path=r"议会\\测试议题",
+    )
+    factory = SolutionFactory(config)
+    requested_profile, requested_lanes = factory._select_lanes("standard10")
+    effective_profile, effective_lanes, preflight = factory._preflight_lanes(
+        requested_profile=requested_profile,
+        requested_lanes=requested_lanes,
+    )
+
+    assert effective_profile == "reduced6"
+    assert [lane.id for lane in effective_lanes] == [lane.id for lane in DEFAULT_LANES[:6]]
+    assert "opencode-kimi" in preflight["unavailable_lane_ids"]
+    assert any(issue["code"] == "profile_degraded" for issue in preflight["issues"])
+
+
+def test_resolve_command_prefix_finds_bun_cached_opencode(monkeypatch, tmp_path: Path) -> None:
+    bun_cached = tmp_path / "opencode.exe"
+    bun_cached.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(solution_factory_core, "first_env", lambda *names: "")
+    monkeypatch.setattr(solution_factory_core.shutil, "which", lambda name: None)
+    monkeypatch.setattr(solution_factory_core, "_find_bun_cached_opencode", lambda: bun_cached)
+
+    resolved = solution_factory_core.resolve_command_prefix("opencode", workspace_root=tmp_path / "workspace")
+
+    assert resolved == [str(bun_cached)]
+
+
+def test_solution_factory_watcher_emits_alert_for_slow_lane(tmp_path: Path) -> None:
+    brief_path = tmp_path / "brief.md"
+    brief_path.write_text("# Brief\n\n测试觉者 watcher。", encoding="utf-8")
+    fake_cli = tmp_path / "fake_cli.py"
+    write_fake_cli(fake_cli)
+
+    config = SolutionFactoryConfig(
+        workspace_root=tmp_path / "workspace",
+        cache_root=tmp_path / "cache",
+        obsidian_root=tmp_path / "obsidian",
+        project_path=r"议会\\觉者测试",
+        command_overrides={
+            "codex": [sys.executable, str(fake_cli)],
+            "claude": [sys.executable, str(fake_cli)],
+        },
+        timeout_sec=60,
+        max_workers=2,
+    )
+    config.workspace_root.mkdir(parents=True, exist_ok=True)
+    config.watcher_policy.seat_stall_threshold_sec = 1
+    config.watcher_policy.stage_silent_threshold_sec = 1
+    original_env = {key: os.environ.get(key) for key in {"PIJIANG_FAKE_SLOW_LANES", "PIJIANG_FAKE_SLOW_SEC"}}
+    os.environ["PIJIANG_FAKE_SLOW_LANES"] = "codex-gpt"
+    os.environ["PIJIANG_FAKE_SLOW_SEC"] = "2"
+    try:
+        summary = SolutionFactory(config).run(brief_path=brief_path, lanes="reduced6", watcher_mode="on")
+    finally:
+        for key, value in original_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    assert summary["watcher_enabled"] is True
+    assert summary["watcher_alert_count"] >= 1
+    output_dir = Path(summary["obsidian_output_dir"])
+    assert output_dir.joinpath("06-juezhe-watch.md").exists()

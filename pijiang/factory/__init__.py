@@ -25,6 +25,11 @@ from .types import (
     SearchArtifact,
     SeatResult,
     VisualizationProfile,
+    WatcherAction,
+    WatcherAdvice,
+    WatcherAlert,
+    WatcherPolicy,
+    WatcherStatus,
     WorkflowProfile,
 )
 
@@ -55,6 +60,11 @@ __all__ = [
     "SearchArtifact",
     "SeatResult",
     "VisualizationProfile",
+    "WatcherAction",
+    "WatcherAdvice",
+    "WatcherAlert",
+    "WatcherPolicy",
+    "WatcherStatus",
     "WorkflowProfile",
     "build_readiness_report",
     "build_demo_config",

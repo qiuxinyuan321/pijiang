@@ -95,6 +95,87 @@ class VisualizationProfile:
 
 
 @dataclass
+class WatcherPolicy:
+    enabled: bool = True
+    mode: str = "user_proxy_guardian"
+    cli_mode: str = "auto"
+    trigger_codes: list[str] = field(
+        default_factory=lambda: [
+            "provider_unavailable",
+            "profile_degraded",
+            "seat_stalled",
+            "stage_silent",
+            "subprocess_hung",
+            "orphan_process_detected",
+            "seat_failed",
+            "fusion_failed",
+            "status_stale",
+            "missing_expected_artifact",
+            "critical_quorum_missing",
+            "run_interrupted",
+        ]
+    )
+    seat_stall_threshold_sec: int = 120
+    stage_silent_threshold_sec: int = 180
+    max_auto_repairs_per_run: int = 3
+    user_proxy: bool = True
+    sidecar: bool = True
+    non_voting: bool = True
+
+
+@dataclass
+class WatcherAlert:
+    alert_id: str
+    timestamp: str
+    trigger_code: str
+    target_id: str
+    stage: str
+    severity: str
+    observation: str
+    recommendation: str
+    user_proxy: bool = True
+
+
+@dataclass
+class WatcherAdvice:
+    advice_id: str
+    timestamp: str
+    trigger_code: str
+    target_id: str
+    stage: str
+    severity: str
+    observation: str
+    recommendation: str
+    suggested_next_step: str = ""
+    source: str = "watcher"
+    user_proxy: bool = True
+
+
+@dataclass
+class WatcherAction:
+    action_id: str
+    timestamp: str
+    trigger_code: str
+    target_id: str
+    stage: str
+    executed_action: str
+    result: str
+    observation: str = ""
+    recommendation: str = ""
+    user_proxy: bool = True
+
+
+@dataclass
+class WatcherStatus:
+    enabled: bool
+    state: str = "idle"
+    alert_count: int = 0
+    action_count: int = 0
+    last_message: str = ""
+    advice_path: str = ""
+
+
+@dataclass
 class HostIntegrationSpec:
     host: str
     output_dir: str
@@ -147,6 +228,11 @@ class RunProgressSnapshot:
     ghosted_seat_ids: list[str] = field(default_factory=list)
     late_seat_ids: list[str] = field(default_factory=list)
     parallel_policy: str = "strict_all"
+    watcher_enabled: bool = False
+    watcher_state: str = "idle"
+    watcher_alert_count: int = 0
+    watcher_action_count: int = 0
+    watcher_last_message: str = ""
     artifacts: dict[str, str] = field(default_factory=dict)
 
 
@@ -271,6 +357,11 @@ class BenchmarkMeasurement:
     cutover_latency_saved_ms: int = 0
     degraded_flags: list[str] = field(default_factory=list)
     truth_audit_path: str = ""
+    watcher_enabled: bool = False
+    watcher_alert_count: int = 0
+    watcher_action_count: int = 0
+    watcher_extra_latency_ms: int = 0
+    recovered_run_count: int = 0
 
 
 @dataclass

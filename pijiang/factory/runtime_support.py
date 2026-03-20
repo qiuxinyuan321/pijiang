@@ -449,7 +449,7 @@ def render_final_draft_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[LaneResult]) -> str:
+def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[LaneResult], watcher_filename: str | None = None) -> str:
     frontmatter = frontmatter_block(
         {
             "sf_run_id": run_id,
@@ -475,6 +475,8 @@ def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[La
             "- [90-final-solution-draft.md](90-final-solution-draft.md)",
         ]
     )
+    if watcher_filename:
+        lines.extend(["", "## 守护层", f"- [{watcher_filename}]({watcher_filename})"])
     return "\n".join(lines).rstrip() + "\n"
 
 

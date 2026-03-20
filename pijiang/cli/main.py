@@ -322,6 +322,7 @@ def command_run(args: argparse.Namespace) -> int:
             topic=args.topic.strip(),
             timeout_sec=args.timeout_sec,
             max_workers=args.max_workers,
+            watcher_mode=args.watcher,
         )
         config.onboarding.first_run_acknowledged = True
         save_config(config, config_path)
@@ -378,6 +379,7 @@ def command_demo(args: argparse.Namespace) -> int:
             topic=args.topic.strip(),
             timeout_sec=args.timeout_sec,
             max_workers=args.max_workers,
+            watcher_mode=args.watcher,
         )
         _print_json({"demo_config_path": str(demo_path), **summary})
         return 0
@@ -411,6 +413,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--timeout-sec", type=int, default=120, help="单席超时时间。")
     demo_parser.add_argument("--max-workers", type=int, default=6, help="最大并行席位数。")
     demo_parser.add_argument("--parallel-policy", choices=["strict_all", "ghost_isolation"], default="ghost_isolation", help="并行执行策略。")
+    demo_parser.add_argument("--watcher", choices=["auto", "on", "off"], default="off", help="觉者守护层策略。")
     demo_parser.set_defaults(func=command_demo)
 
     integrate_parser = subparsers.add_parser("integrate", help="生成宿主集成文件，不替换原入口。")
@@ -426,6 +429,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--timeout-sec", type=int, default=900, help="单席超时时间。")
     run_parser.add_argument("--max-workers", type=int, default=6, help="最大并行席位数。")
     run_parser.add_argument("--parallel-policy", choices=["strict_all", "ghost_isolation"], default="ghost_isolation", help="并行执行策略。")
+    run_parser.add_argument("--watcher", choices=["auto", "on", "off"], default="auto", help="觉者守护层策略。")
     run_parser.add_argument("--yes", action="store_true", help="跳过运行前确认。")
     run_parser.add_argument("--allow-degraded", action="store_true", help="显式允许带 warning 的降级运行。")
     run_parser.set_defaults(func=command_run)

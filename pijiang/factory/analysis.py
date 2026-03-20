@@ -13,7 +13,7 @@ from .runtime_support import CANONICAL_SECTIONS, utc_now_iso, write_json, write_
 from .types import BenchmarkMeasurement, BenchmarkReport, EvidenceRef, QualityAssessment, RegressionCase, RunTruthAudit, SearchArtifact, SeatResult
 
 
-SEARCH_SEAT_IDS = {"search-1", "search-2"}
+SEARCH_SEAT_IDS = {"search-1", "search-2", "codex-github-cases", "codex-web-research"}
 POLLUTION_MARKERS = (
     '{"type":"step_start"',
     '{"type":"tool_use"',
@@ -39,6 +39,58 @@ DEFAULT_OUTPUT_FILENAMES = {
     "fusion": "19-fusion.md",
 }
 
+MISSING_SECTION_PLACEHOLDER = "> 缺口：模型未显式给出本节内容。"
+
+
+def _seat_type_from_id(item_id: str) -> str:
+    if item_id in {"search-1", "search-2", "codex-github-cases", "codex-web-research"}:
+        return "search"
+    if item_id in {"chaos", "codex-chaos"}:
+        return "chaos"
+    if item_id in {"skeptic", "codex-skeptic"}:
+        return "skeptic"
+    if item_id in {"controller", "codex-gpt"}:
+        return "controller"
+    if item_id in {"planning", "claude-gpt"}:
+        return "planning"
+    if item_id == "fusion":
+        return "fusion"
+    return "marshal"
+
+
+def _manifest_items(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    if manifest.get("seats"):
+        return list(manifest["seats"])
+    if manifest.get("lanes"):
+        payloads: list[dict[str, Any]] = []
+        for lane in manifest["lanes"]:
+            lane_id = str(lane.get("seat_id") or lane.get("id") or "").strip()
+            payloads.append(
+                {
+                    **lane,
+                    "seat_id": lane_id,
+                    "seat_type": str(lane.get("seat_type") or _seat_type_from_id(lane_id)),
+                }
+            )
+        return payloads
+    return []
+
+
+def _variant_dir_for_item(run_dir: Path, item_id: str) -> Path:
+    for root_name in ("seats", "lanes"):
+        candidate = run_dir / root_name / item_id
+        if candidate.exists():
+            return candidate
+    return run_dir / "seats" / item_id
+
+
+def _status_items(status_payload: dict[str, Any]) -> dict[str, str]:
+    if status_payload.get("seat_statuses"):
+        return {str(key): str(value) for key, value in status_payload["seat_statuses"].items()}
+    if status_payload.get("lane_statuses"):
+        return {str(key): str(value) for key, value in status_payload["lane_statuses"].items()}
+    return {}
+
 
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -48,6 +100,13 @@ def _read_text(path: Path) -> str:
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _is_missing_section_placeholder(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return True
+    return stripped.startswith(MISSING_SECTION_PLACEHOLDER)
 
 
 def _list_lines(text: str) -> list[str]:
@@ -112,7 +171,10 @@ def _section_map_from_markdown(text: str) -> dict[str, str]:
 
 
 def _mode_from_manifest(manifest: dict[str, Any]) -> str:
-    seat_count = int(manifest.get("seat_count") or len(manifest.get("seats", [])))
+    effective_profile = str(manifest.get("effective_lane_profile", "")).strip().lower()
+    if effective_profile in {"single", "reduced6", "standard10"}:
+        return effective_profile
+    seat_count = int(manifest.get("seat_count") or len(_manifest_items(manifest)))
     council_mode = str(manifest.get("council_mode", "")).strip()
     if seat_count == 1:
         return "single"
@@ -132,7 +194,7 @@ def _output_filename_for_seat(seat_payload: dict[str, Any]) -> str:
 
 def _build_quality_assessment(seat_id: str, markdown_text: str) -> QualityAssessment:
     sections = _section_map_from_markdown(markdown_text)
-    filled_sections = sum(1 for value in sections.values() if value and "缺口" not in value)
+    filled_sections = sum(1 for value in sections.values() if not _is_missing_section_placeholder(value))
     section_completeness = filled_sections / max(1, len(CANONICAL_SECTIONS))
     anchor_hits = _count_anchor_hits(markdown_text)
     evidence_count = len(_extract_evidence_refs(markdown_text))
@@ -175,7 +237,7 @@ def _build_seat_result(seat_id: str, seat_type: str, markdown_text: str) -> Seat
     sections = _section_map_from_markdown(markdown_text)
     claims: list[dict[str, Any]] = []
     for section_name, body in sections.items():
-        if not body or "缺口" in body:
+        if _is_missing_section_placeholder(body):
             continue
         claims.append(
             {
@@ -322,6 +384,9 @@ def _compute_audit_status(reason_codes: set[str], fake_success_flags: list[str],
         "timeout_partial_only",
         "hidden_fallback",
         "head_of_line_blocking",
+        "provider_unavailable",
+        "provider_invocation_failure",
+        "profile_degraded",
     }
     review_reasons = {"missing_sections"}
 
@@ -346,7 +411,8 @@ def audit_council_run(
     output_dir = Path(summary["obsidian_output_dir"]).expanduser().resolve()
     manifest = _read_json(run_dir / "run_manifest.json")
     brief_text = _read_text(Path(manifest["brief_path"]).expanduser().resolve())
-    expected_seat_count = len(manifest.get("seats", []))
+    manifest_items = _manifest_items(manifest)
+    expected_seat_count = len(manifest_items)
     successful_texts: list[str] = []
     cases: list[RegressionCase] = []
     degraded_chain_ids: list[str] = []
@@ -364,10 +430,10 @@ def audit_council_run(
     search_with_evidence = 0
     seat_valid_count = 0
 
-    for seat_payload in manifest.get("seats", []):
+    for seat_payload in manifest_items:
         seat_id = seat_payload["seat_id"]
         seat_type = seat_payload.get("seat_type", "")
-        seat_dir = run_dir / "seats" / seat_id
+        seat_dir = _variant_dir_for_item(run_dir, seat_id)
         variant_result_path = seat_dir / "variant_result.json"
         variant_payload = _read_json(variant_result_path) if variant_result_path.exists() else {"status": "missing"}
         markdown_name = _output_filename_for_seat(seat_payload)
@@ -378,7 +444,7 @@ def audit_council_run(
         write_json(analysis_root / f"{seat_id}.quality-assessment.json", asdict(quality))
         write_json(analysis_root / f"{seat_id}.seat-result.json", asdict(seat_result))
 
-        if seat_id in SEARCH_SEAT_IDS:
+        if seat_id in SEARCH_SEAT_IDS or seat_type == "search":
             search_expected += 1
             search_artifact = _build_search_artifact(seat_id, markdown_text)
             write_json(analysis_root / f"{seat_id}.search-artifact.json", asdict(search_artifact))
@@ -421,7 +487,13 @@ def audit_council_run(
         else:
             degraded_chain_ids.append(seat_id)
             repair_candidates.append(f"{seat_id}: 修复失败 seat 的稳定性，并保留完整留痕。")
-            seat_failure_type = "schema_failure" if markdown_text else "timeout_partial_only"
+            error_summary = str(variant_payload.get("error_summary", "")).lower()
+            if "unable to resolve" in error_summary or "executable" in error_summary:
+                seat_failure_type = "provider_unavailable"
+            elif "winerror 5" in error_summary or "permission" in error_summary:
+                seat_failure_type = "provider_invocation_failure"
+            else:
+                seat_failure_type = "schema_failure" if markdown_text else "timeout_partial_only"
             reason_codes.add(seat_failure_type)
             cases.append(
                 _build_regression_case(
@@ -515,18 +587,22 @@ def audit_council_run(
                 verification_command=verification_command,
             )
         )
+    status_items = _status_items(status_payload)
     non_terminal_seats = [
         seat_id
-        for seat_id, seat_status in status_payload.get("seat_statuses", {}).items()
+        for seat_id, seat_status in status_items.items()
         if seat_status not in {"success", "failed", "ghost_blocked", "late_result"}
     ]
     terminal_seat_count = sum(
         1
-        for seat_status in status_payload.get("seat_statuses", {}).values()
+        for seat_status in status_items.values()
         if seat_status in {"success", "failed", "ghost_blocked", "late_result"}
     )
     if non_terminal_seats or terminal_seat_count != expected_seat_count:
         reason_codes.add("topology_mismatch")
+    if manifest.get("requested_lane_profile") and manifest.get("effective_lane_profile"):
+        if manifest["requested_lane_profile"] != manifest["effective_lane_profile"]:
+            reason_codes.add("profile_degraded")
     if summary.get("parallel_policy") == "ghost_isolation":
         if summary.get("quorum_reached"):
             reason_codes.add("quorum_fusion")
@@ -595,7 +671,7 @@ def _provider_call_count(run_dir: Path) -> int:
         if not line.strip():
             continue
         payload = json.loads(line)
-        if payload.get("kind") in {"seat-attempt-start", "fusion-step-start"}:
+        if payload.get("kind") in {"seat-attempt-start", "lane-attempt-start", "fusion-step-start"}:
             count += 1
     return count
 
@@ -649,6 +725,9 @@ def build_benchmark_measurement(summary: dict[str, Any], *, audit: RunTruthAudit
         cutover_latency_saved_ms=max(0, _latency_ms(status) - int(summary.get("fusion_cutover_ms", 0) or 0)),
         degraded_flags=loaded_audit.fake_success_flags + loaded_audit.degraded_chain_ids,
         truth_audit_path=str(output_dir / "70-run-truth-audit.json"),
+        watcher_enabled=bool(summary.get("watcher_enabled", False)),
+        watcher_alert_count=int(summary.get("watcher_alert_count", 0) or 0),
+        watcher_action_count=int(summary.get("watcher_action_count", 0) or 0),
     )
 
 
