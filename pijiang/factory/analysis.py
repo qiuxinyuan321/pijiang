@@ -39,6 +39,8 @@ DEFAULT_OUTPUT_FILENAMES = {
     "fusion": "19-fusion.md",
 }
 
+MISSING_SECTION_PLACEHOLDER = "> 缺口：模型未显式给出本节内容。"
+
 
 def _seat_type_from_id(item_id: str) -> str:
     if item_id in {"search-1", "search-2", "codex-github-cases", "codex-web-research"}:
@@ -98,6 +100,13 @@ def _read_text(path: Path) -> str:
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _is_missing_section_placeholder(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return True
+    return stripped.startswith(MISSING_SECTION_PLACEHOLDER)
 
 
 def _list_lines(text: str) -> list[str]:
@@ -185,7 +194,7 @@ def _output_filename_for_seat(seat_payload: dict[str, Any]) -> str:
 
 def _build_quality_assessment(seat_id: str, markdown_text: str) -> QualityAssessment:
     sections = _section_map_from_markdown(markdown_text)
-    filled_sections = sum(1 for value in sections.values() if value and "缺口" not in value)
+    filled_sections = sum(1 for value in sections.values() if not _is_missing_section_placeholder(value))
     section_completeness = filled_sections / max(1, len(CANONICAL_SECTIONS))
     anchor_hits = _count_anchor_hits(markdown_text)
     evidence_count = len(_extract_evidence_refs(markdown_text))
@@ -228,7 +237,7 @@ def _build_seat_result(seat_id: str, seat_type: str, markdown_text: str) -> Seat
     sections = _section_map_from_markdown(markdown_text)
     claims: list[dict[str, Any]] = []
     for section_name, body in sections.items():
-        if not body or "缺口" in body:
+        if _is_missing_section_placeholder(body):
             continue
         claims.append(
             {

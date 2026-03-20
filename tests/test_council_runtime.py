@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import pijiang.factory.analysis as factory_analysis
 from pijiang.factory.analysis import build_benchmark_report, load_truth_audit
 from pijiang.factory.config import build_default_config, find_provider, save_config
 from pijiang.factory.council import CouncilEngine
@@ -434,3 +435,21 @@ def test_recover_abandoned_runs_marks_interrupted_run(tmp_path: Path) -> None:
     assert status["status"] == "failed"
     assert status["watcher_state"] == "recovered"
     assert output_dir.joinpath("06-juezhe-watch.md").exists()
+
+
+def test_quality_assessment_does_not_treat_normal_gap_discussion_as_missing() -> None:
+    markdown = (
+        "# 问题定义\n这里讨论当前系统的关键缺口，但这不是占位文案。\n\n"
+        "# 目标与非目标\n目标明确。\n\n"
+        "# 用户/场景\n场景明确。\n\n"
+        "# 系统架构\n架构明确。\n\n"
+        "# 模块拆分\n模块明确。\n\n"
+        "# 关键流程\n流程明确。\n\n"
+        "# 技术选型\n技术明确。\n\n"
+        "# 风险与取舍\n风险明确。\n\n"
+        "# 里程碑\n里程碑明确。\n\n"
+        "# 待确认问题\n无。\n"
+    )
+    assessment = factory_analysis._build_quality_assessment("controller", markdown)
+    assert assessment.schema_valid is True
+    assert "missing_sections" not in assessment.reason_codes
