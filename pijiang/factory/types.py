@@ -143,6 +143,10 @@ class RunProgressSnapshot:
     running_seat_ids: list[str] = field(default_factory=list)
     current_seat_id: str = ""
     updated_at: str = ""
+    quorum_ready: bool = False
+    ghosted_seat_ids: list[str] = field(default_factory=list)
+    late_seat_ids: list[str] = field(default_factory=list)
+    parallel_policy: str = "strict_all"
     artifacts: dict[str, str] = field(default_factory=dict)
 
 
@@ -235,6 +239,7 @@ class ExecutionPolicy:
     hard_budget: int = 10
     circuit_breaker_threshold: int = 2
     quality_retry_threshold: int = 12
+    parallel_policy: str = "ghost_isolation"
 
 
 @dataclass
@@ -260,6 +265,10 @@ class BenchmarkMeasurement:
     issue_readiness_score: float
     failed_rate: float
     fake_success_rate: float
+    time_to_fusion_cutover_ms: int = 0
+    ghosted_lane_count: int = 0
+    late_result_count: int = 0
+    cutover_latency_saved_ms: int = 0
     degraded_flags: list[str] = field(default_factory=list)
     truth_audit_path: str = ""
 

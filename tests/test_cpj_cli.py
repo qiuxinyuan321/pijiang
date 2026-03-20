@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ def write_fake_cli(path: Path) -> None:
     path.write_text(
         """from __future__ import annotations
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -174,6 +176,7 @@ def test_cpj_init_writes_default_config_and_vault(tmp_path: Path) -> None:
     assert (vault_path / "10-Dashboards" / "10席议会拓扑.md").exists()
     config = load_config(config_path)
     controller = config.provider_profiles[0]
+    assert config.execution_policy.parallel_policy == "ghost_isolation"
     assert controller.relay_url == ""
     assert controller.scheme == "https"
     assert controller.host == ""
@@ -235,6 +238,8 @@ def test_cpj_run_executes_full_council_with_command_bridge_profiles(tmp_path: Pa
             "60",
             "--max-workers",
             "4",
+            "--parallel-policy",
+            "strict_all",
         ]
     )
     assert exit_code == 0
@@ -249,6 +254,8 @@ def test_cpj_run_executes_full_council_with_command_bridge_profiles(tmp_path: Pa
     assert (run_dir / "status.json").exists()
     assert (run_dir / "events.jsonl").exists()
     assert (run_dir / "summary.json").exists()
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["parallel_policy"] == "strict_all"
 
     output_root = Path(config.visualization.vault_path) / config.project_prefix / "测试议题" / "方案工厂"
     output_dirs = list(output_root.iterdir())

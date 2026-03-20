@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -125,8 +126,12 @@ prompt = read_prompt()
 stage = extract_marker(prompt, "SF-STAGE", "variant")
 lane = extract_marker(prompt, "SF-LANE-ID", "unknown-seat")
 slow_lane = os.environ.get("PIJIANG_FAKE_SLOW_LANE", "").strip()
-if slow_lane and slow_lane == lane:
-    time.sleep(2)
+slow_lanes = {item.strip() for item in os.environ.get("PIJIANG_FAKE_SLOW_LANES", "").split(",") if item.strip()}
+if slow_lane:
+    slow_lanes.add(slow_lane)
+slow_sec = float(os.environ.get("PIJIANG_FAKE_SLOW_SEC", "2").strip() or "2")
+if slow_lanes and lane in slow_lanes:
+    time.sleep(slow_sec)
 body = build_body(stage, lane)
 output_path = get_option("--output-last-message")
 if output_path:
@@ -272,3 +277,76 @@ def test_build_benchmark_report_from_completed_runs(tmp_path: Path) -> None:
     assert [item.mode for item in report.measurements] == ["single", "reduced6", "standard10"]
     assert all(item.truth_audit_path for item in report.measurements)
     assert all(hasattr(item, "audit_pass_success_rate") for item in report.measurements)
+
+
+def test_ghost_isolation_cuts_over_before_slow_seats(tmp_path: Path) -> None:
+    fake_cli = tmp_path / "fake_cli.py"
+    write_fake_cli(fake_cli)
+
+    config = build_command_bridge_config(tmp_path / "ghost", fake_cli)
+    config.execution_policy.parallel_policy = "ghost_isolation"
+    brief_path = (tmp_path / "ghost" / "ghost.md")
+    brief_path.parent.mkdir(parents=True, exist_ok=True)
+    brief_path.write_text("# Brief\n\n验证 ghost isolation。", encoding="utf-8")
+
+    original = {key: os.environ.get(key) for key in {"PIJIANG_FAKE_SLOW_LANES": "", "PIJIANG_FAKE_SLOW_SEC": ""}}
+    os.environ["PIJIANG_FAKE_SLOW_LANES"] = "search-2,marshal-3"
+    os.environ["PIJIANG_FAKE_SLOW_SEC"] = "8"
+    try:
+        started = time.monotonic()
+        summary = CouncilEngine(config).run(
+            brief_path=brief_path,
+            topic="ghost-isolation",
+            timeout_sec=30,
+            max_workers=6,
+        )
+        elapsed = time.monotonic() - started
+    finally:
+        for key, value in original.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    assert summary["parallel_policy"] == "ghost_isolation"
+    assert summary["quorum_reached"] is True
+    assert summary["quorum_profile"] == "standard10-quorum6"
+    assert summary["ghosted_lane_count"] >= 1
+    assert {"search-2", "marshal-3"}.issubset(set(summary["ghosted_lane_ids"]))
+    assert summary["fusion_cutover_ms"] > 0
+    assert elapsed < 8
+
+
+def test_strict_all_keeps_waiting_for_slow_seats(tmp_path: Path) -> None:
+    fake_cli = tmp_path / "fake_cli.py"
+    write_fake_cli(fake_cli)
+
+    config = build_command_bridge_config(tmp_path / "strict", fake_cli)
+    config.execution_policy.parallel_policy = "strict_all"
+    brief_path = (tmp_path / "strict" / "strict.md")
+    brief_path.parent.mkdir(parents=True, exist_ok=True)
+    brief_path.write_text("# Brief\n\n验证 strict_all。", encoding="utf-8")
+
+    original = {key: os.environ.get(key) for key in {"PIJIANG_FAKE_SLOW_LANES": "", "PIJIANG_FAKE_SLOW_SEC": ""}}
+    os.environ["PIJIANG_FAKE_SLOW_LANES"] = "search-2,marshal-3"
+    os.environ["PIJIANG_FAKE_SLOW_SEC"] = "3"
+    try:
+        started = time.monotonic()
+        summary = CouncilEngine(config).run(
+            brief_path=brief_path,
+            topic="strict-all",
+            timeout_sec=30,
+            max_workers=6,
+        )
+        elapsed = time.monotonic() - started
+    finally:
+        for key, value in original.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    assert summary["parallel_policy"] == "strict_all"
+    assert summary["quorum_reached"] is False
+    assert summary["ghosted_lane_ids"] == []
+    assert elapsed >= 3

@@ -3,18 +3,46 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
+import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 from .endpoints import build_chat_endpoint
-from .types import ExecutionRequest, ExecutionResponse, ProviderProfile
+from .types import ExecutionRequest, ExecutionResponse, ProviderCapabilities, ProviderProfile
 
 
 class ProviderExecutionError(RuntimeError):
     pass
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    else:
+        process.kill()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def profile_from_payload(payload: dict[str, Any]) -> ProviderProfile:
+    capabilities = ProviderCapabilities(**dict(payload.get("capabilities") or {}))
+    data = dict(payload)
+    data["capabilities"] = capabilities
+    return ProviderProfile(**data)
 
 
 def _extract_json_block(text: str) -> dict[str, Any]:
@@ -268,6 +296,143 @@ class DemoAdapter(BaseProviderAdapter):
             model=self.profile.model,
             metadata={"transport": "demo"},
         )
+
+
+def _execute_command_bridge_request(
+    profile: ProviderProfile,
+    request: ExecutionRequest,
+    *,
+    cancel_event: Any | None = None,
+) -> ExecutionResponse:
+    if not profile.command:
+        raise ProviderExecutionError(f"profile {profile.id} is missing command bridge settings")
+    command = [str(item) for item in profile.command]
+    if request.output_path is not None:
+        command.extend(["--output-last-message", str(request.output_path)])
+    if request.schema is not None and request.output_path is not None:
+        schema_path = request.output_path.with_suffix(".schema.json")
+        schema_path.write_text(json.dumps(request.schema, ensure_ascii=False, indent=2), encoding="utf-8")
+        command.extend(["--output-schema", str(schema_path)])
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if process.stdin is not None:
+        process.stdin.write(request.prompt)
+        process.stdin.close()
+    started = time.monotonic()
+    while True:
+        if process.poll() is not None:
+            break
+        if cancel_event is not None and cancel_event.is_set():
+            _terminate_process_tree(process)
+            raise ProviderExecutionError(f"{profile.id} command bridge canceled after quorum cutover")
+        if request.timeout_sec > 0 and time.monotonic() - started >= request.timeout_sec:
+            _terminate_process_tree(process)
+            raise ProviderExecutionError(f"{profile.id} command bridge timed out after {request.timeout_sec}s")
+        time.sleep(0.25)
+    stdout = process.stdout.read() if process.stdout is not None else ""
+    stderr = process.stderr.read() if process.stderr is not None else ""
+    if process.returncode != 0:
+        raise ProviderExecutionError(
+            f"{profile.id} command bridge failed with {process.returncode}: {(stderr or stdout).strip()}"
+        )
+    content = ""
+    if request.output_path is not None and request.output_path.exists():
+        content = request.output_path.read_text(encoding="utf-8").strip()
+    if not content:
+        content = (stdout or "").strip()
+    if request.schema is not None:
+        content = json.dumps(_extract_json_block(content), ensure_ascii=False)
+    return ExecutionResponse(
+        content=content,
+        raw_stdout=stdout or "",
+        raw_stderr=stderr or "",
+        provider_id=profile.id,
+        model=profile.model,
+        metadata={"transport": "command-bridge", "command": command},
+    )
+
+
+def _execute_http_request_in_worker(
+    profile: ProviderProfile,
+    request: ExecutionRequest,
+    *,
+    cancel_event: Any | None = None,
+    worker_dir: Path | None = None,
+) -> ExecutionResponse:
+    root = (worker_dir or Path.cwd()).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    input_path = root / f"{profile.id}.worker-input.json"
+    output_path = root / f"{profile.id}.worker-output.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "profile": asdict(profile),
+                "request": {
+                    "prompt": request.prompt,
+                    "output_mode": request.output_mode,
+                    "schema": request.schema,
+                    "timeout_sec": request.timeout_sec,
+                    "output_path": str(request.output_path) if request.output_path is not None else "",
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-m", "pijiang.factory.provider_worker", "--input", str(input_path), "--output", str(output_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=Path(__file__).resolve().parents[2],
+    )
+    started = time.monotonic()
+    while True:
+        if process.poll() is not None:
+            break
+        if cancel_event is not None and cancel_event.is_set():
+            _terminate_process_tree(process)
+            raise ProviderExecutionError(f"{profile.id} worker canceled after quorum cutover")
+        if request.timeout_sec > 0 and time.monotonic() - started >= request.timeout_sec:
+            _terminate_process_tree(process)
+            raise ProviderExecutionError(f"{profile.id} worker timed out after {request.timeout_sec}s")
+        time.sleep(0.25)
+    stdout = process.stdout.read() if process.stdout is not None else ""
+    stderr = process.stderr.read() if process.stderr is not None else ""
+    if process.returncode != 0:
+        raise ProviderExecutionError(f"{profile.id} worker failed with {process.returncode}: {(stderr or stdout).strip()}")
+    if not output_path.exists():
+        raise ProviderExecutionError(f"{profile.id} worker finished without output payload")
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    return ExecutionResponse(
+        content=str(payload.get("content", "")),
+        raw_stdout=str(payload.get("raw_stdout", "")),
+        raw_stderr=str(payload.get("raw_stderr", "")),
+        provider_id=str(payload.get("provider_id", profile.id)),
+        model=str(payload.get("model", profile.model)),
+        metadata=dict(payload.get("metadata") or {}),
+    )
+
+
+def execute_profile_request(
+    profile: ProviderProfile,
+    request: ExecutionRequest,
+    *,
+    cancel_event: Any | None = None,
+    worker_dir: Path | None = None,
+) -> ExecutionResponse:
+    if profile.adapter_type == "command_bridge":
+        return _execute_command_bridge_request(profile, request, cancel_event=cancel_event)
+    if profile.adapter_type in {"openai_compatible", "planning_api", "ollama"}:
+        return _execute_http_request_in_worker(profile, request, cancel_event=cancel_event, worker_dir=worker_dir)
+    return adapter_for_profile(profile).execute(request)
 
 
 def adapter_for_profile(profile: ProviderProfile) -> BaseProviderAdapter:

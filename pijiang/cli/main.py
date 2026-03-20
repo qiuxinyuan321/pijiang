@@ -144,6 +144,8 @@ def _doctor_payload(config: PijiangConfig) -> dict[str, object]:
         "council_mode": council_mode(config),
         "readiness_status": readiness.status,
         "provider_preflight_status": readiness.status,
+        "parallel_policy": config.execution_policy.parallel_policy,
+        "quorum_profile": "standard10-quorum6" if council_mode(config) == "standard" and config.execution_policy.parallel_policy == "ghost_isolation" else "strict-all",
         "active_profile_count": unique_active_profile_count(config),
         "runnable_profile_count": unique_active_profile_count(config, runnable_only=True),
         "active_profile_ids": sorted(active_profiles),
@@ -181,6 +183,8 @@ def _render_doctor_human(payload: dict[str, object]) -> str:
         "",
         f"- readiness: {payload['readiness_status']}",
         f"- provider preflight: {payload['provider_preflight_status']}",
+        f"- parallel policy: {payload['parallel_policy']}",
+        f"- quorum profile: {payload['quorum_profile']}",
         f"- 标准拓扑席位: {payload['standard_topology_seat_count']}",
         f"- 已启用席位: {payload['enabled_seat_count']}",
         f"- 可真实运行席位: {payload['runnable_seat_count']}",
@@ -312,6 +316,7 @@ def command_run(args: argparse.Namespace) -> int:
                 return 1
 
         engine = CouncilEngine(config, progress_callback=_progress_printer)
+        config.execution_policy.parallel_policy = args.parallel_policy
         summary = engine.run(
             brief_path=brief_path,
             topic=args.topic.strip(),
@@ -366,6 +371,7 @@ def command_demo(args: argparse.Namespace) -> int:
             return _print_error(f"demo brief 文件不存在: {brief_path}")
 
         print("正在运行 demo 模式：不会调用真实外部 API，而是生成一套完整示例链路。")
+        demo_config.execution_policy.parallel_policy = args.parallel_policy
         engine = CouncilEngine(demo_config, progress_callback=_progress_printer)
         summary = engine.run(
             brief_path=brief_path,
@@ -404,6 +410,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--topic", default="皮匠-demo", help="demo 议题名称。")
     demo_parser.add_argument("--timeout-sec", type=int, default=120, help="单席超时时间。")
     demo_parser.add_argument("--max-workers", type=int, default=6, help="最大并行席位数。")
+    demo_parser.add_argument("--parallel-policy", choices=["strict_all", "ghost_isolation"], default="ghost_isolation", help="并行执行策略。")
     demo_parser.set_defaults(func=command_demo)
 
     integrate_parser = subparsers.add_parser("integrate", help="生成宿主集成文件，不替换原入口。")
@@ -418,6 +425,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--topic", required=True, help="议题名称。")
     run_parser.add_argument("--timeout-sec", type=int, default=900, help="单席超时时间。")
     run_parser.add_argument("--max-workers", type=int, default=6, help="最大并行席位数。")
+    run_parser.add_argument("--parallel-policy", choices=["strict_all", "ghost_isolation"], default="ghost_isolation", help="并行执行策略。")
     run_parser.add_argument("--yes", action="store_true", help="跳过运行前确认。")
     run_parser.add_argument("--allow-degraded", action="store_true", help="显式允许带 warning 的降级运行。")
     run_parser.set_defaults(func=command_run)
