@@ -36,6 +36,9 @@
 - 完整议会主线默认 `parallel_policy = ghost_isolation`
 - 非完整拓扑或评估 profile 默认 `strict_all`
 - 这不是“更激进的异步编排”，而是“达到法定人数后的幽灵隔离 cutover”
+- 可选 `觉者` 守护层默认用于真实 `run`
+  - 它代表用户身份盯运行稳定性与外部中断修复
+  - 它不计入 `10 席`、不参与 quorum、也不参与 fusion 投票
 
 如果某项能力不服务这条主线，它就不会抢 `Phase A+` 优先级。
 

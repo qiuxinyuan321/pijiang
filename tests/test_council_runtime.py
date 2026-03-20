@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 from pijiang.factory.analysis import build_benchmark_report, load_truth_audit
 from pijiang.factory.config import build_default_config, find_provider, save_config
 from pijiang.factory.council import CouncilEngine
+from pijiang.factory.watcher import recover_abandoned_runs
 
 
 def write_fake_cli(path: Path) -> None:
@@ -350,3 +351,86 @@ def test_strict_all_keeps_waiting_for_slow_seats(tmp_path: Path) -> None:
     assert summary["quorum_reached"] is False
     assert summary["ghosted_lane_ids"] == []
     assert elapsed >= 3
+
+
+def test_watcher_writes_guard_artifacts_for_slow_run(tmp_path: Path) -> None:
+    fake_cli = tmp_path / "fake_cli.py"
+    write_fake_cli(fake_cli)
+
+    config = build_command_bridge_config(tmp_path / "watcher", fake_cli)
+    config.execution_policy.parallel_policy = "strict_all"
+    config.watcher_policy.seat_stall_threshold_sec = 1
+    config.watcher_policy.stage_silent_threshold_sec = 1
+    brief_path = (tmp_path / "watcher" / "watcher.md")
+    brief_path.parent.mkdir(parents=True, exist_ok=True)
+    brief_path.write_text("# Brief\n\n验证觉者守护层。", encoding="utf-8")
+
+    original = {key: os.environ.get(key) for key in {"PIJIANG_FAKE_SLOW_LANES": "", "PIJIANG_FAKE_SLOW_SEC": ""}}
+    os.environ["PIJIANG_FAKE_SLOW_LANES"] = "search-2"
+    os.environ["PIJIANG_FAKE_SLOW_SEC"] = "2"
+    try:
+        summary = CouncilEngine(config).run(
+            brief_path=brief_path,
+            topic="watcher-run",
+            timeout_sec=30,
+            max_workers=6,
+            watcher_mode="on",
+        )
+    finally:
+        for key, value in original.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    assert summary["watcher_enabled"] is True
+    assert summary["watcher_alert_count"] >= 1
+    assert Path(summary["watcher_advice_path"]).exists()
+    assert Path(summary["obsidian_output_dir"]).joinpath("06-juezhe-watch.md").exists()
+
+
+def test_recover_abandoned_runs_marks_interrupted_run(tmp_path: Path) -> None:
+    cache_root = tmp_path / "cache"
+    run_dir = cache_root / "runs" / "cpj-abandoned"
+    output_dir = tmp_path / "output"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "events.jsonl").write_text("", encoding="utf-8")
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "cpj-abandoned",
+                "owner_pid": 999999,
+                "obsidian_output_dir": str(output_dir),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (run_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "run_id": "cpj-abandoned",
+                "owner_pid": 999999,
+                "status": "running",
+                "stage": "variants",
+                "started_at": "2026-03-20T00:00:00Z",
+                "finished_at": "",
+                "updated_at": "2026-03-20T00:00:00Z",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    recovered = recover_abandoned_runs(cache_root)
+
+    assert recovered
+    status = json.loads((run_dir / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "failed"
+    assert status["watcher_state"] == "recovered"
+    assert output_dir.joinpath("06-juezhe-watch.md").exists()

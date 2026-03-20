@@ -23,6 +23,8 @@
 
 对外安装包名是 `pijiang`，主命令是 `cpj`。
 
+当前公开主线继续保持 `10 席主议会`。另外存在一个可选的旁路守护层 `觉者`：它代表用户身份盯运行稳定性与外部中断修复，但不参与 quorum，也不改最终方案结论。
+
 ## 核心理念
 
 现在多数 AI 产出，对用户来说仍然像黑盒。你通常只知道结果，却不知道这个结果是怎么来的，也不知道还有哪些路线被错过了。
@@ -96,6 +98,8 @@
 
 完整图解和更细的说明放在 [docs/demo-visuals.md](docs/demo-visuals.md)。
 
+需要额外说明的是：`觉者` 不是第 11 个投票席位。它是可选守护层，负责观察整条任务执行链，在卡顿、中断、悬挂或假 running 时代表用户给出建议与有限修复留痕。
+
 这里需要明确三个不同概念：
 
 - `display default`
@@ -137,6 +141,7 @@
 | run 后 `truth audit` | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
 | `regression cases` 留痕 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
 | 幽灵堵车隔离并行 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
+| `觉者` 运行守护层 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
 | provider preflight 与支持边界 | 已整理 | [docs/support-matrix.md](docs/support-matrix.md) |
 
 这部分故意只写“已经证实的东西”。下面这些能力仍然保留，但**不会**在首页宣称已经完整生效：

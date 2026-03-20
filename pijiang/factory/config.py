@@ -14,6 +14,7 @@ from .types import (
     ProviderCapabilities,
     ProviderProfile,
     VisualizationProfile,
+    WatcherPolicy,
     WorkflowProfile,
 )
 
@@ -43,6 +44,7 @@ class PijiangConfig:
     execution_policy: ExecutionPolicy = field(default_factory=ExecutionPolicy)
     visualization: VisualizationProfile = field(default_factory=VisualizationProfile)
     onboarding: OnboardingState = field(default_factory=OnboardingState)
+    watcher_policy: WatcherPolicy = field(default_factory=WatcherPolicy)
 
 
 def default_home() -> Path:
@@ -384,6 +386,10 @@ def _execution_policy_from_dict(payload: dict[str, Any] | None) -> ExecutionPoli
     return ExecutionPolicy(**(payload or {}))
 
 
+def _watcher_policy_from_dict(payload: dict[str, Any] | None) -> WatcherPolicy:
+    return WatcherPolicy(**(payload or {}))
+
+
 def _onboarding_from_dict(payload: dict[str, Any] | None) -> OnboardingState:
     return OnboardingState(**(payload or {}))
 
@@ -405,6 +411,7 @@ def load_config(path: Path | None = None) -> PijiangConfig:
         execution_policy=_execution_policy_from_dict(payload.get("execution_policy")),
         visualization=_visualization_from_dict(payload.get("visualization")),
         onboarding=_onboarding_from_dict(payload.get("onboarding")),
+        watcher_policy=_watcher_policy_from_dict(payload.get("watcher_policy")),
     )
 
 
