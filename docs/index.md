@@ -9,9 +9,10 @@
 按这个顺序读最快：
 
 1. [README.md](../README.md)
-2. [first-success-path.md](first-success-path.md)
-3. [support-matrix.md](support-matrix.md)
-4. [demo-visuals.md](demo-visuals.md)
+2. [project-philosophy.md](project-philosophy.md)
+3. [first-success-path.md](first-success-path.md)
+4. [support-matrix.md](support-matrix.md)
+5. [demo-visuals.md](demo-visuals.md)
 
 这条路径适合：
 
@@ -35,6 +36,8 @@
 
 | 主题 | 文档 | 作用 |
 | --- | --- | --- |
+| 核心理念与演化 | [project-philosophy.md](project-philosophy.md) | 看懂项目为什么存在、为什么会继续进化 |
+| AI 代理视角 | [for-ai-agents.md](for-ai-agents.md) | 从 AI 第一人称视角理解这套制度的优点 |
 | 首页图解 | [demo-visuals.md](demo-visuals.md) | 看懂 10 席议会、黄金路径、demo 产物链 |
 | 运行时回流验证 | [runtime-backflow-validation.md](runtime-backflow-validation.md) | 看清哪些能力已经回流、哪些还没宣称完成 |
 | 路线图 | [ROADMAP.md](ROADMAP.md) | 看当前阶段、Phase A+ / B / C 的边界 |
@@ -60,6 +63,8 @@
 | 文档 | 解决什么问题 | 适合谁先看 |
 | --- | --- | --- |
 | [README.md](../README.md) | 项目首页、价值认知、快速入口 | 所有人 |
+| [project-philosophy.md](project-philosophy.md) | 核心理念、起源实验、项目演化样本 | 想先理解项目为什么存在的人 |
+| [for-ai-agents.md](for-ai-agents.md) | 从 AI 代理视角看这个项目的优点 | AI 代理、维护者 |
 | [first-success-path.md](first-success-path.md) | 新用户第一次怎样最稳地跑通 | 新用户 |
 | [support-matrix.md](support-matrix.md) | 当前官方 / tested / community / experimental 边界 | 新用户、贡献者 |
 | [demo-visuals.md](demo-visuals.md) | 10 席议会、demo 产物链、图解说明 | 想先理解产品的人 |
@@ -74,14 +79,16 @@
 如果你只想按“最短不踩坑路径”理解整个项目，推荐固定读这 5 页：
 
 1. [README.md](../README.md)
-2. [first-success-path.md](first-success-path.md)
-3. [support-matrix.md](support-matrix.md)
-4. [runtime-backflow-validation.md](runtime-backflow-validation.md)
-5. [ROADMAP.md](ROADMAP.md)
+2. [project-philosophy.md](project-philosophy.md)
+3. [first-success-path.md](first-success-path.md)
+4. [support-matrix.md](support-matrix.md)
+5. [runtime-backflow-validation.md](runtime-backflow-validation.md)
+6. [ROADMAP.md](ROADMAP.md)
 
 这 5 页分别负责：
 
 - 项目定位
+- 核心理念与演化方式
 - 首次成功路径
 - 支持边界
 - 已验证能力
