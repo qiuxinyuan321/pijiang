@@ -4,6 +4,8 @@
 
 返回总导航见 [index.md](index.md)。
 
+如果你只想先看当前这一轮最新真实 baseline 与 `觉者` 守护层快照，请先读 [current-baseline-and-watcher.md](current-baseline-and-watcher.md)。
+
 ## 本轮已回流能力
 
 - 运行中状态快照增强
