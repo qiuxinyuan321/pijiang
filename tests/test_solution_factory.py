@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -292,3 +293,31 @@ def test_solution_factory_watcher_emits_alert_for_slow_lane(tmp_path: Path) -> N
     assert summary["watcher_alert_count"] >= 1
     output_dir = Path(summary["obsidian_output_dir"])
     assert output_dir.joinpath("06-juezhe-watch.md").exists()
+
+
+def test_run_subprocess_bootstraps_claude_runtime(monkeypatch, tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def fake_bootstrap(*, timeout_sec: int) -> None:
+        calls.append(f"bootstrap:{timeout_sec}")
+
+    def fake_run(*args, **kwargs):
+        calls.append("subprocess")
+        return subprocess.CompletedProcess(args=kwargs.get("args", args[0] if args else []), returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(solution_factory_core, "ensure_claude_runtime_ready", fake_bootstrap)
+    monkeypatch.setattr(solution_factory_core.subprocess, "run", fake_run)
+
+    config = SolutionFactoryConfig(
+        workspace_root=tmp_path / "workspace",
+        cache_root=tmp_path / "cache",
+        obsidian_root=tmp_path / "obsidian",
+        project_path=r"议会\\Claude引导测试",
+    )
+    factory = SolutionFactory(config)
+    prepared = solution_factory_core.PreparedCommand(command=["claude", "-p", "ok"], cwd=tmp_path, stdin_text="hello")
+
+    completed = factory._run_subprocess(prepared, timeout_sec=30)
+
+    assert completed.returncode == 0
+    assert calls == ["bootstrap:20", "subprocess"]

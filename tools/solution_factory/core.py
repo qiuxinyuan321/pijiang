@@ -7,6 +7,7 @@ import os
 import os.path
 import re
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -32,6 +33,45 @@ def first_env(*names: str) -> str:
         if value:
             return value
     return ""
+
+
+def _claude_bootstrap_script_path() -> Path:
+    return Path.home() / ".claude" / "scripts" / "start-ccnexus-server.ps1"
+
+
+def _is_tcp_port_open(host: str, port: int, *, timeout_sec: float = 0.25) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout_sec):
+            return True
+    except OSError:
+        return False
+
+
+def ensure_claude_runtime_ready(*, timeout_sec: int = 20) -> None:
+    script_path = _claude_bootstrap_script_path()
+    if not script_path.exists():
+        return
+    pwsh = shutil.which("pwsh") or shutil.which("powershell")
+    if not pwsh:
+        return
+    if _is_tcp_port_open("127.0.0.1", 3000):
+        return
+    completed = subprocess.run(
+        [pwsh, "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script_path)],
+        text=True,
+        capture_output=True,
+        timeout=timeout_sec,
+        check=False,
+    )
+    if completed.returncode != 0:
+        message = (completed.stderr or completed.stdout).strip()
+        raise RuntimeError(f"failed to bootstrap Claude runtime: {message or completed.returncode}")
+    deadline = time.time() + min(10, timeout_sec)
+    while time.time() < deadline:
+        if _is_tcp_port_open("127.0.0.1", 3000):
+            return
+        time.sleep(0.2)
+    raise RuntimeError("Claude runtime bootstrap completed but 127.0.0.1:3000 is still unavailable")
 
 
 CANONICAL_SECTIONS = [
@@ -1318,6 +1358,9 @@ class SolutionFactory:
         return run_id, run_dir, output_dir, manifest
 
     def _run_subprocess(self, prepared: PreparedCommand, *, timeout_sec: int) -> subprocess.CompletedProcess[str]:
+        executable_name = Path(str(prepared.command[0])).stem.lower() if prepared.command else ""
+        if executable_name == "claude":
+            ensure_claude_runtime_ready(timeout_sec=min(timeout_sec, 20))
         env = dict(os.environ)
         env.update(prepared.env)
         return subprocess.run(
