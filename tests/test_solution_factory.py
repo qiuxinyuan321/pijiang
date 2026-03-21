@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -333,6 +334,9 @@ def test_solution_factory_watcher_emits_alert_for_slow_lane(tmp_path: Path) -> N
     assert summary["watcher_alert_count"] >= 1
     output_dir = Path(summary["obsidian_output_dir"])
     assert output_dir.joinpath("06-juezhe-watch.md").exists()
+    ledger = json.loads(Path(summary["run_dir"]).joinpath("watcher", "watcher-ledger.json").read_text(encoding="utf-8"))
+    assert ledger["entries"]
+    assert any(item["final_action"] == "no_action" for item in ledger["entries"])
 
 
 def test_run_subprocess_bootstraps_claude_runtime(monkeypatch, tmp_path: Path) -> None:

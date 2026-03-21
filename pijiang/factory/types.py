@@ -166,6 +166,22 @@ class WatcherAction:
 
 
 @dataclass
+class WatcherLedgerEntry:
+    entry_id: str
+    timestamp: str
+    trigger_code: str
+    target_id: str
+    stage: str
+    severity: str
+    judgment: str
+    source_signals: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+    final_action: str = "pending"
+    no_action_reason: str = ""
+    user_proxy: bool = True
+
+
+@dataclass
 class WatcherStatus:
     enabled: bool
     state: str = "idle"

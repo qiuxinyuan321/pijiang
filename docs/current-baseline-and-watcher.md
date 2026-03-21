@@ -19,7 +19,7 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| run id | `sf-20260321-173637-34080` |
+| run id | `sf-20260321-200827-26632` |
 | mode | `standard11` |
 | requested profile | `standard11` |
 | effective profile | `standard11` |
@@ -30,6 +30,7 @@
 | evidence_integrity_score | `100` |
 | fusion_integrity_score | `100` |
 | watcher_enabled | `true` |
+| watcher_alert_count | `0` |
 | baseline_admitted | `true` |
 
 这条 run 的意义不是“所有场景已经彻底稳定”，而是：
@@ -38,6 +39,7 @@
 - authority contract 与 Baseline Admission Gate 已进入真实运行链
 - 四个显式 `opencode-*` 裨将都真实在位
 - `truth audit` 与 `觉者` 守护层都已经进入真实运行链
+- admitted 后第一轮 watcher precision verification 已把误报压到 `0`
 
 这也是当前仓库里最新一条已经完整通过 `audit_status = success` 且 `baseline_admitted = true` 的 baseline 快照。
 
@@ -53,14 +55,15 @@
 | P0a 后首条 formal rerun | `sf-20260321-165524-26436` |
 | rerun 状态 | `audit_status = degraded` |
 | 已定位原因 | truth audit 仍把 `fusion` seat 当普通 lane，误压成 `timeout_partial_only` |
-| 当前 admitted baseline | `sf-20260321-173637-34080` |
+| 当前 admitted baseline | `sf-20260321-200827-26632` |
 | admitted 状态 | `audit_status = success` + `baseline_admitted = true` |
+| guardian 精度信号 | `watcher_alert_count = 0` |
 
 这意味着：
 
 - `standard11` 的 seat/profile 合同与 authority contract 都已经冻结并写进仓库
 - `sf-20260321-165524-26436` 的价值是暴露 `fusion` seat 审计误判，而不是被包装成失败叙事
-- `sf-20260321-173637-34080` 现在是 current canonical baseline 的真实 admitted 样本
+- `sf-20260321-200827-26632` 现在是 current canonical baseline 的最新 admitted 样本
 
 ## 你会拿到哪些产物
 
@@ -72,6 +75,7 @@
 | `02-topology-report.md` | seat / phase / guardian 命名边界与显式拓扑 |
 | `03-seat-registry.json` | 本轮 seat registry 快照 |
 | `04-provider-preflight-snapshot.json` | 本轮 provider preflight 快照 |
+| `watcher/watcher-ledger.json` | guardian judgment / no_action 留痕账本 |
 | `30-idea-map.md` | 共识点、冲突点与可组合点 |
 | `40-debate-round-1.md` | 第一轮议会对抗 |
 | `41-debate-round-2.md` | 第二轮议会对抗 |
@@ -114,6 +118,7 @@
   - `allow_degraded`
 - Baseline Admission Gate 已接通并真实裁决
 - `fusion` seat 与 `final-synthesis` phase 的边界已经进入真实审计链
+- `guardian ledger` 已接通，`alert -> no_action` 不再是纯噪音日志
 
 ## 这轮没有宣称什么
 

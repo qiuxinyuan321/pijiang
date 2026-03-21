@@ -239,6 +239,11 @@ def stage_marker_block(stage: str, lane_id: str) -> str:
     return f"SF-STAGE: {stage}\nSF-LANE-ID: {lane_id}\n"
 
 
+def _heartbeat_message(prefix: str, started_at: float) -> str:
+    elapsed = max(1, int(time.monotonic() - started_at))
+    return f"{prefix}，已耗时 {elapsed}s。"
+
+
 @dataclass(frozen=True)
 class LaneSpec:
     id: str
@@ -1262,6 +1267,39 @@ class RunTracker:
             write_json(self.status_path, self.state)
 
 
+class _HeartbeatLoop:
+    def __init__(
+        self,
+        *,
+        tracker: RunTracker,
+        stage: str,
+        seat_id: str = "",
+        message_prefix: str,
+        interval_sec: int = 15,
+    ) -> None:
+        self.tracker = tracker
+        self.stage = stage
+        self.seat_id = seat_id
+        self.message_prefix = message_prefix
+        self.interval_sec = interval_sec
+        self._stop = threading.Event()
+        self._started = time.monotonic()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval_sec):
+            message = _heartbeat_message(self.message_prefix, self._started)
+            self.tracker.touch(message=message, seat_id=self.seat_id)
+            self.tracker.emit("heartbeat", stage=self.stage, seat_id=self.seat_id, message=message)
+
+
 class SolutionFactory:
     def __init__(self, config: SolutionFactoryConfig):
         self.config = config
@@ -1602,7 +1640,17 @@ class SolutionFactory:
                     opencode_variant=self.config.opencode_variant,
                     opencode_runtime_root=lane_run_dir / "opencode-runtime" if lane.family == "opencode" else None,
                 )
-                completed = self._run_subprocess(prepared, timeout_sec=self.config.timeout_sec)
+                heartbeat = _HeartbeatLoop(
+                    tracker=tracker,
+                    stage="variants",
+                    seat_id=lane.id,
+                    message_prefix=f"{lane.id} 正在运行第 {attempt} 次尝试",
+                )
+                heartbeat.start()
+                try:
+                    completed = self._run_subprocess(prepared, timeout_sec=self.config.timeout_sec)
+                finally:
+                    heartbeat.stop()
                 write_text(raw_stdout_path, completed.stdout or "")
                 write_text(raw_stderr_path, completed.stderr or "")
                 write_text(lane_run_dir / f"stdout.attempt-{attempt}.log", completed.stdout or "")
@@ -1712,6 +1760,13 @@ class SolutionFactory:
         tracker.emit("fusion-step-start", stage=stage)
         provider_used = "codex"
         model_used = DEFAULT_CODEX_MODEL
+        heartbeat = _HeartbeatLoop(
+            tracker=tracker,
+            stage="fusion",
+            seat_id="fusion",
+            message_prefix=f"融合步骤 {stage} 正在执行",
+        )
+        heartbeat.start()
         try:
             prepared = build_codex_fusion_command(
                 workspace_root=self.workspace_root,
@@ -1750,6 +1805,8 @@ class SolutionFactory:
             body = (completed.stdout or "").strip()
             if not body:
                 raise RuntimeError(f"fusion step {stage} failed: codex={str(exc)} | claude returned empty content")
+        finally:
+            heartbeat.stop()
         write_text(
             self.current_output_dir / filename,
             render_stage_markdown(
@@ -1785,6 +1842,13 @@ class SolutionFactory:
         tracker.emit("fusion-step-start", stage=stage)
         provider_used = "codex"
         model_used = DEFAULT_CODEX_MODEL
+        heartbeat = _HeartbeatLoop(
+            tracker=tracker,
+            stage="fusion",
+            seat_id="fusion",
+            message_prefix=f"融合步骤 {stage} 正在执行",
+        )
+        heartbeat.start()
         try:
             prepared = build_codex_fusion_command(
                 workspace_root=self.workspace_root,
@@ -1828,6 +1892,8 @@ class SolutionFactory:
                 raise RuntimeError(f"fusion step {stage} failed: codex={str(exc)} | claude returned empty JSON")
             payload = json.loads(raw_payload)
             write_text(output_last_message_path, json.dumps(payload, ensure_ascii=False, indent=2))
+        finally:
+            heartbeat.stop()
         tracker.emit("fusion-step-success", stage=stage, provider=provider_used, output=str(output_last_message_path))
         return payload, provider_used, model_used
 

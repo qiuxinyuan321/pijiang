@@ -396,6 +396,9 @@ def test_watcher_writes_guard_artifacts_for_slow_run(tmp_path: Path) -> None:
     assert summary["watcher_alert_count"] >= 1
     assert Path(summary["watcher_advice_path"]).exists()
     assert Path(summary["obsidian_output_dir"]).joinpath("06-juezhe-watch.md").exists()
+    ledger = json.loads(Path(summary["run_dir"]).joinpath("watcher", "watcher-ledger.json").read_text(encoding="utf-8"))
+    assert ledger["entries"]
+    assert any(item["final_action"] == "no_action" for item in ledger["entries"])
 
 
 def test_recover_abandoned_runs_marks_interrupted_run(tmp_path: Path) -> None:

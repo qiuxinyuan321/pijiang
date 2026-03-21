@@ -59,11 +59,16 @@
     - `watcher/watcher-events.jsonl`
     - `watcher/watcher-alerts.json`
     - `watcher/watcher-actions.json`
+    - `watcher/watcher-ledger.json`
     - `06-juezhe-watch.md`
   - 当前默认负责：
     - 卡顿/静默告警
     - 上次中断 run 的失败收尾修复
     - 受控降级与运行异常建议
+  - 当前 precision hardening 已新增：
+    - 多源 heartbeat 判定
+    - guardian ledger
+    - `alert -> no_action` 结构化解释链
 
 ## 当前不宣称完成的能力
 
@@ -99,6 +104,12 @@
   - 结果：`audit_status = success`
   - 结果：`baseline_admitted = true`
   - 含义：`standard11` 现在已经拿到新的真实 formal success baseline，而不是只停留在纸面 canonical
+- watcher precision verification run
+  - run: `sf-20260321-200827-26632`
+  - mode: `standard11`
+  - 结果：`audit_status = success`
+  - 结果：`watcher_alert_count = 0`
+  - 含义：admitted 后第一轮 guardian precision verification 已把上一轮 `9` 条误报压到 `0`
 - 历史 `standard10` 成功 baseline
   - run: `sf-20260320-154315-30532`
   - mode: `standard10`
@@ -130,7 +141,8 @@
 - benchmark taxonomy、seat/profile 合同、authority contract 与 admission gate 都已经落地
 - 真实失败与退化仍然会被留痕，而不是被成功表象掩盖
 - `sf-20260321-165524-26436` 证明了 formal rerun 仍会继续产出真实 regression 输入
-- `sf-20260321-173637-34080` 则证明新的 standard11 authority baseline 已经能被真实 gate 放行
+- `sf-20260321-173637-34080` 证明新的 standard11 authority baseline 已经能被真实 gate 放行
+- `sf-20260321-200827-26632` 证明 watcher precision hardening 已经开始收口 guardian credibility
 
 基于这四条真实样本，本轮只回流以下能力：
 
@@ -138,6 +150,7 @@
 - run 后 truth audit
 - regression cases/index
 - authority contract / baseline admission gate
+- watcher precision hardening / guardian ledger
 - seat 质量门
 - 搜索位证据约束
 - 幽灵堵车隔离并行
