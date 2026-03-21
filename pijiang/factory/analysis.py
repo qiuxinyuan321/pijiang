@@ -237,6 +237,25 @@ def _build_quality_assessment(seat_id: str, markdown_text: str) -> QualityAssess
     )
 
 
+def _build_fusion_quality_assessment(seat_id: str, final_decisions_text: str, final_draft_text: str) -> QualityAssessment:
+    schema_valid = bool(final_decisions_text.strip()) and bool(final_draft_text.strip())
+    quality_flags: list[str] = []
+    reason_codes: list[str] = []
+    if not schema_valid:
+        quality_flags.append("missing_fusion_artifacts")
+        reason_codes.append("timeout_partial_only")
+    return QualityAssessment(
+        seat_id=seat_id,
+        schema_valid=schema_valid,
+        anchor_hits=2 if schema_valid else 0,
+        evidence_count=len(_extract_evidence_refs(final_draft_text)),
+        section_completeness=1.0 if schema_valid else 0.0,
+        quality_score=25 if schema_valid else 0,
+        quality_flags=quality_flags,
+        reason_codes=reason_codes,
+    )
+
+
 def _build_seat_result(seat_id: str, seat_type: str, markdown_text: str) -> SeatResult:
     sections = _section_map_from_markdown(markdown_text)
     claims: list[dict[str, Any]] = []
@@ -270,6 +289,29 @@ def _build_seat_result(seat_id: str, seat_type: str, markdown_text: str) -> Seat
         open_questions=_list_lines(sections.get("待确认问题", ""))[:8],
         evidence_refs=evidence_refs,
         confidence="low" if quality.quality_score < 10 else "medium" if quality.quality_score < 18 else "high",
+        quality_flags=quality.quality_flags,
+    )
+
+
+def _build_fusion_seat_result(seat_id: str, final_draft_text: str, quality: QualityAssessment) -> SeatResult:
+    return SeatResult(
+        seat_id=seat_id,
+        seat_type="fusion",
+        summary=_first_sentence(final_draft_text),
+        sections={"final-synthesis": final_draft_text.strip()},
+        claims=[],
+        recommendations=[],
+        risks=[],
+        open_questions=[],
+        evidence_refs=[
+            EvidenceRef(
+                ref_id=hashlib.sha1(item.encode("utf-8")).hexdigest()[:8],
+                source=item,
+                snippet=item,
+            )
+            for item in _extract_evidence_refs(final_draft_text)
+        ],
+        confidence="high" if quality.schema_valid else "low",
         quality_flags=quality.quality_flags,
     )
 
@@ -438,13 +480,22 @@ def audit_council_run(
         seat_id = seat_payload["seat_id"]
         seat_type = seat_payload.get("seat_type", "")
         seat_dir = _variant_dir_for_item(run_dir, seat_id)
-        variant_result_path = seat_dir / "variant_result.json"
-        variant_payload = _read_json(variant_result_path) if variant_result_path.exists() else {"status": "missing"}
-        markdown_name = _output_filename_for_seat(seat_payload)
-        markdown_path = output_dir / markdown_name if markdown_name else output_dir / f"{seat_id}.md"
-        markdown_text = _read_text(markdown_path)
-        quality = _build_quality_assessment(seat_id, markdown_text)
-        seat_result = _build_seat_result(seat_id, seat_type, markdown_text)
+        if seat_id == "fusion" or seat_type == "fusion":
+            final_decisions_text = _read_text(output_dir / "50-fusion-decisions.md")
+            markdown_path = output_dir / "90-final-solution-draft.md"
+            markdown_text = _read_text(markdown_path)
+            quality = _build_fusion_quality_assessment(seat_id, final_decisions_text, markdown_text)
+            seat_result = _build_fusion_seat_result(seat_id, markdown_text, quality)
+            variant_status = "success" if quality.schema_valid else "missing"
+            variant_payload = {"status": variant_status}
+        else:
+            variant_result_path = seat_dir / "variant_result.json"
+            variant_payload = _read_json(variant_result_path) if variant_result_path.exists() else {"status": "missing"}
+            markdown_name = _output_filename_for_seat(seat_payload)
+            markdown_path = output_dir / markdown_name if markdown_name else output_dir / f"{seat_id}.md"
+            markdown_text = _read_text(markdown_path)
+            quality = _build_quality_assessment(seat_id, markdown_text)
+            seat_result = _build_seat_result(seat_id, seat_type, markdown_text)
         write_json(analysis_root / f"{seat_id}.quality-assessment.json", asdict(quality))
         write_json(analysis_root / f"{seat_id}.seat-result.json", asdict(seat_result))
 

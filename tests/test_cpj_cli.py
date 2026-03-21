@@ -203,10 +203,19 @@ def test_cpj_demo_generates_demo_run_without_real_api(tmp_path: Path) -> None:
     output_dirs = list(demo_run_root.iterdir())
     assert len(output_dirs) == 1
     output_dir = output_dirs[0]
+    run_id = output_dir.name
     assert (output_dir / "01-run-overview.md").exists()
+    assert (output_dir / "02-topology-report.md").exists()
     assert (output_dir / "30-idea-map.md").exists()
     assert (output_dir / "50-fusion-decisions.md").exists()
     assert (output_dir / "90-final-solution-draft.md").exists()
+    assert (output_dir / "75-baseline-admission.md").exists()
+    summary = json.loads(
+        (tmp_path / "workspace" / ".cache" / "solution-factory" / "demo" / "runs" / run_id / "summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["run_role"] == "demo"
+    assert summary["run_grade"] == "demo"
+    assert summary["baseline_admitted"] is False
 
 
 def test_cpj_demo_rejects_missing_explicit_config(tmp_path: Path, capsys) -> None:
@@ -256,18 +265,28 @@ def test_cpj_run_executes_full_council_with_command_bridge_profiles(tmp_path: Pa
     assert (run_dir / "summary.json").exists()
     summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["parallel_policy"] == "strict_all"
+    assert summary["run_role"] == "requalification"
+    assert summary["run_grade"] == "formal"
+    assert summary["baseline_candidate"] is True
+    assert summary["baseline_admitted"] is True
+    assert summary["baseline_promotion_status"] == "admitted"
+    assert summary["baseline_admission_path"].endswith("75-baseline-admission.md")
 
     output_root = Path(config.visualization.vault_path) / config.project_prefix / "测试议题" / "方案工厂"
     output_dirs = list(output_root.iterdir())
     assert len(output_dirs) == 1
     output_dir = output_dirs[0]
     assert (output_dir / "01-run-overview.md").exists()
+    assert (output_dir / "02-topology-report.md").exists()
+    assert (output_dir / "03-seat-registry.json").exists()
+    assert (output_dir / "04-provider-preflight-snapshot.json").exists()
     assert (output_dir / "10-controller.md").exists()
     assert (output_dir / "11-planning.md").exists()
     assert (output_dir / "30-idea-map.md").exists()
     assert (output_dir / "50-fusion-decisions.md").exists()
     assert (output_dir / "90-final-solution-draft.md").exists()
     assert (output_dir / "70-run-truth-audit.json").exists()
+    assert (output_dir / "75-baseline-admission.md").exists()
     assert (output_dir / "80-regression-cases-index.md").exists()
 
 

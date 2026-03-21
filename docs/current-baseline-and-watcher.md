@@ -1,6 +1,6 @@
 # 当前真实 Baseline 与觉者守护层
 
-这页只说明当前已经验证成功的真实基线，以及 standard11 切换到公开 canonical 之后的当前状态，不承担路线图或历史总账功能。
+这页只说明当前已经验证成功的真实基线，以及 `standard11` 成为公开 canonical/default profile 之后的当前状态，不承担路线图或历史总账功能。
 
 ## 这页回答什么
 
@@ -19,42 +19,48 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| run id | `sf-20260320-154315-30532` |
-| mode | `standard10` |
-| requested profile | `standard10` |
-| effective profile | `standard10` |
+| run id | `sf-20260321-173637-34080` |
+| mode | `standard11` |
+| requested profile | `standard11` |
+| effective profile | `standard11` |
+| run_role | `requalification` |
+| run_grade | `formal` |
 | audit_status | `success` |
 | seat_integrity_score | `100` |
 | evidence_integrity_score | `100` |
 | fusion_integrity_score | `100` |
 | watcher_enabled | `true` |
+| baseline_admitted | `true` |
 
 这条 run 的意义不是“所有场景已经彻底稳定”，而是：
 
-- `standard10` 已恢复为真实可跑
-- 这轮 baseline 不再是 `reduced6` 的临时降级样本
+- `standard11` 已拿到新的真实 formal success baseline
+- authority contract 与 Baseline Admission Gate 已进入真实运行链
+- 四个显式 `opencode-*` 裨将都真实在位
 - `truth audit` 与 `觉者` 守护层都已经进入真实运行链
 
-这也是当前仓库里最后一条已经完整通过 `audit_status = success` 的 baseline 快照。
+这也是当前仓库里最新一条已经完整通过 `audit_status = success` 且 `baseline_admitted = true` 的 baseline 快照。
 
 ## standard11 当前状态
 
-`standard11` 已经成为当前公开 canonical/default profile，但它的“最新成功 baseline”还在收敛中。当前已确认的事实是：
+`standard11` 已经不是“纸面 canonical”，而是已经拿到新的 admitted baseline。当前已确认的关键事实是：
 
 | 项目 | 当前值 |
 | --- | --- |
 | 成功定向会 | `sf-20260320-194846-73268` |
 | 定向会角色 | standard11 合同与迁移规则的权威来源 |
 | 定向会状态 | `audit_status = success` |
-| 最新 public baseline 重跑 | `sf-20260320-211359-7232` |
-| 重跑状态 | `audit_status = fail` |
-| 已定位原因 | `claude-gpt` 外部 `503`，以及一条已在代码里修掉的 `topology_mismatch` 留痕缺口 |
+| P0a 后首条 formal rerun | `sf-20260321-165524-26436` |
+| rerun 状态 | `audit_status = degraded` |
+| 已定位原因 | truth audit 仍把 `fusion` seat 当普通 lane，误压成 `timeout_partial_only` |
+| 当前 admitted baseline | `sf-20260321-173637-34080` |
+| admitted 状态 | `audit_status = success` + `baseline_admitted = true` |
 
 这意味着：
 
-- `standard11` 的 seat/profile 合同已经冻结并写进仓库
-- 当前 latest successful baseline 仍然是 `sf-20260320-154315-30532`
-- `sf-20260320-211359-7232` 是真实 regression 输入，不是可以拿来宣传成功的样本
+- `standard11` 的 seat/profile 合同与 authority contract 都已经冻结并写进仓库
+- `sf-20260321-165524-26436` 的价值是暴露 `fusion` seat 审计误判，而不是被包装成失败叙事
+- `sf-20260321-173637-34080` 现在是 current canonical baseline 的真实 admitted 样本
 
 ## 你会拿到哪些产物
 
@@ -63,11 +69,15 @@
 | 工件 | 作用 |
 | --- | --- |
 | `00-brief.md` | 本轮议题与输入 |
+| `02-topology-report.md` | seat / phase / guardian 命名边界与显式拓扑 |
+| `03-seat-registry.json` | 本轮 seat registry 快照 |
+| `04-provider-preflight-snapshot.json` | 本轮 provider preflight 快照 |
 | `30-idea-map.md` | 共识点、冲突点与可组合点 |
 | `40-debate-round-1.md` | 第一轮议会对抗 |
 | `41-debate-round-2.md` | 第二轮议会对抗 |
 | `50-fusion-decisions.md` | 决策账本 |
 | `70-run-truth-audit.json` | 本轮 truth audit 裁决 |
+| `75-baseline-admission.md` | authority baseline 准入裁决 |
 | `80-regression-cases-index.md` | 失败/退化样本入口 |
 | `90-final-solution-draft.md` | 当前终版草案 |
 | `06-juezhe-watch.md` | 觉者守护层的观察与建议留痕 |
@@ -94,13 +104,16 @@
 
 当前已经被真实 run 证实的点包括：
 
-- `standard10` 已恢复为真实可跑
+- `standard11` 已恢复为真实可跑，并拿到 admitted baseline
 - `opencode` 已重新接回运行链
 - `truth audit` 已接通并真实产出
 - `觉者` 已接通并真实留痕
-- 这轮结果已经不是 `reduced6` 的临时降级替身
-- `standard11` 的 seat/profile 合同已经由成功定向会冻结
-- 最新 `standard11` baseline 重跑把 `claude-gpt` 503 和状态留痕缺口压成了正式 regression 输入
+- authority manifest 字段已经接通：
+  - `run_role`
+  - `run_grade`
+  - `allow_degraded`
+- Baseline Admission Gate 已接通并真实裁决
+- `fusion` seat 与 `final-synthesis` phase 的边界已经进入真实审计链
 
 ## 这轮没有宣称什么
 

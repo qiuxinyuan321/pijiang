@@ -44,12 +44,18 @@
 
 - `requested_profile`
 - `effective_profile`
+- `run_role`
+- `run_grade`
+- `allow_degraded`
 - `seat_registry_version`
 - `resolved_seats`
 - `legacy_compat_applied`
 - `degraded_state`
+- `guardian_layer`
+- `namespace_boundary`
+- `admission_path`
 
-如果 manifest 不能同时证明这 6 个点，本轮 run 不得被叫作 canonical `standard11` 运行。
+如果 manifest 不能同时证明这些点，本轮 run 不得被叫作 canonical `standard11` 运行。
 
 ## 6. Failure Policy
 
@@ -72,18 +78,29 @@
 - 它不进入 seat roster，不参与 quorum，不进入 benchmark seat 计数。
 - 它的留痕应走独立 guardian metadata，而不是混入 council seats。
 
-## 9. Release Gate
+## 9. Authority Admission
+
+- 默认真实 run 身份固定为：
+  - `run_role = requalification`
+  - `run_grade = formal`
+- `demo` 与 `shadow` 都不能冒充 authority baseline run。
+- Baseline Admission Gate 的 companion docs 固定为：
+  - `docs/contracts/65-namespace-boundary.md`
+  - `docs/contracts/70-baseline-admission-charter.md`
+- 通过 gate 前，run 只能算 requalification evidence，不能事后补写成 authority baseline。
+
+## 10. Release Gate
 
 发布顺序固定为：
 
 1. 冻结 decision matrix 和 execution contract。
-2. 落单一 Seat/Profile Registry。
+2. 落单一 Seat/Profile Registry、Namespace Boundary 与 Baseline Admission Charter。
 3. 在分支内完成本地 proof。
 4. 同车切换 `tools.solution_factory`、`pijiang.factory`、README、图解、支持矩阵、首次成功路径和 benchmark 口径。
 
 不允许对外长期双轨，也不允许“代码已经切了、文档稍后再补”。
 
-## 10. Current Evidence
+## 11. Current Evidence
 
 - 成功定向会：`sf-20260320-194846-73268`
 - 当前最新 `standard11` baseline 重跑尝试：`sf-20260320-211359-7232`

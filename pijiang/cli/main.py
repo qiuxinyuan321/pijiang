@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from pijiang.factory.admission import DEMO_RUN_GRADE, DEMO_RUN_ROLE
 from pijiang.factory.config import (
     PijiangConfig,
     active_seats,
@@ -324,6 +325,7 @@ def command_run(args: argparse.Namespace) -> int:
             timeout_sec=args.timeout_sec,
             max_workers=args.max_workers,
             watcher_mode=args.watcher,
+            allow_degraded=bool(args.allow_degraded),
         )
         config.onboarding.first_run_acknowledged = True
         save_config(config, config_path)
@@ -381,6 +383,9 @@ def command_demo(args: argparse.Namespace) -> int:
             timeout_sec=args.timeout_sec,
             max_workers=args.max_workers,
             watcher_mode=args.watcher,
+            allow_degraded=False,
+            run_role=DEMO_RUN_ROLE,
+            run_grade=DEMO_RUN_GRADE,
         )
         _print_json({"demo_config_path": str(demo_path), **summary})
         return 0

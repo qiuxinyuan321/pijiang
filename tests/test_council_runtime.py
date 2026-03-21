@@ -242,7 +242,11 @@ def test_council_run_writes_truth_audit_and_regression_case(tmp_path: Path) -> N
     assert summary["status"] == "degraded"
     assert summary["audit_status"] == "degraded"
     assert summary["failed_lane_count"] == 1
+    assert summary["run_role"] == "requalification"
+    assert summary["run_grade"] == "formal"
+    assert summary["baseline_admitted"] is False
     assert summary["truth_audit_path"]
+    assert summary["baseline_admission_path"].endswith("75-baseline-admission.md")
     assert summary["regression_case_count"] >= 1
     assert "schema_failure" in summary["reason_codes"]
 
@@ -250,6 +254,10 @@ def test_council_run_writes_truth_audit_and_regression_case(tmp_path: Path) -> N
     assert audit.run_id == summary["run_id"]
     assert audit.audit_status == "degraded"
     assert "planning" in audit.degraded_chain_ids
+    assert Path(summary["obsidian_output_dir"]).joinpath("02-topology-report.md").exists()
+    assert Path(summary["obsidian_output_dir"]).joinpath("03-seat-registry.json").exists()
+    assert Path(summary["obsidian_output_dir"]).joinpath("04-provider-preflight-snapshot.json").exists()
+    assert Path(summary["obsidian_output_dir"]).joinpath("75-baseline-admission.md").exists()
     assert Path(summary["obsidian_output_dir"]).joinpath("80-regression-cases-index.md").exists()
 
 

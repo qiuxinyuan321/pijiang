@@ -449,7 +449,14 @@ def render_final_draft_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[LaneResult], watcher_filename: str | None = None) -> str:
+def render_index_markdown(
+    *,
+    run_id: str,
+    created_at: str,
+    lane_results: list[LaneResult],
+    watcher_filename: str | None = None,
+    authority_filenames: list[str] | None = None,
+) -> str:
     frontmatter = frontmatter_block(
         {
             "sf_run_id": run_id,
@@ -464,6 +471,9 @@ def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[La
     for result in lane_results:
         label = result.lane.obsidian_filename
         lines.append(f"- [{label}]({label}) - {result.status}")
+    lines.extend(["", "## Authority & 准入"])
+    for filename in authority_filenames or []:
+        lines.append(f"- [{filename}]({filename})")
     lines.extend(
         [
             "",

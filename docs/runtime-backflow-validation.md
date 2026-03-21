@@ -24,6 +24,20 @@
 - provider preflight 语义
   - `cpj doctor` 与 `cpj run` 现在共享同一套 preflight gate
   - `cpj run` 会明确拒绝带 blocker 的真实 provider 调用
+- authority contract / baseline admission gate
+  - `run_manifest.json` 现在显式写出：
+    - `run_role`
+    - `run_grade`
+    - `allow_degraded`
+    - `guardian_layer`
+    - `namespace_boundary`
+    - `admission_path`
+  - 每轮 formal run 现在会落：
+    - `03-seat-registry.json`
+    - `04-provider-preflight-snapshot.json`
+    - `02-topology-report.md`
+    - `75-baseline-admission.md`
+  - `Baseline Admission Gate` 不再靠口头解释，而是会显式裁决 `admitted / candidate-denied / not-eligible`
 - 搜索位硬化
   - `search-1 / search-2` 不再只是名义搜索位
   - 搜索 seat 若没有证据，不应被视作正常成功
@@ -66,24 +80,30 @@
 
 ## 当前验证基线
 
-当前与 `standard11` 切换最相关的真实证据固定看三条：
+当前与 `standard11` 切换最相关的真实证据固定看四条：
 
-- 当前最后一条成功 baseline
-  - run: `sf-20260320-154315-30532`
-  - mode: `standard10`
-  - 结果：`audit_status = success`
-  - 含义：`truth audit` 与 `觉者` 都已经进入真实运行链，这条 baseline 仍是当前仓库里最后一条完整成功快照
 - 四裨将显式回归与 11 席公开议会定向会
   - run: `sf-20260320-194846-73268`
   - mode: `standard10`
   - 结果：`audit_status = success`
   - 含义：这场会冻结了 `standard11`、四个显式 `opencode-*` 裨将、`fusion` 第 11 席、`standard10-legacy`、治理文件与失效策略
-- standard11 public baseline 重跑
-  - run: `sf-20260320-211359-7232`
+- P0a 后首条 formal rerun
+  - run: `sf-20260321-165524-26436`
   - mode: `standard11`
-  - 结果：`audit_status = fail`
-  - 原因：`claude-gpt` 外部 `503`、`timeout_partial_only`，以及一条已在代码中修掉的 `topology_mismatch`
-  - 含义：这条 run 的价值是形成正式 regression 输入，而不是被包装成成功样本
+  - 结果：`audit_status = degraded`
+  - 原因：truth audit 仍把 `fusion` seat 当普通 lane，误压成 `timeout_partial_only`
+  - 含义：这条 run 的价值是暴露 authority gate 前最后一条审计语义缺口
+- 当前 admitted baseline
+  - run: `sf-20260321-173637-34080`
+  - mode: `standard11`
+  - 结果：`audit_status = success`
+  - 结果：`baseline_admitted = true`
+  - 含义：`standard11` 现在已经拿到新的真实 formal success baseline，而不是只停留在纸面 canonical
+- 历史 `standard10` 成功 baseline
+  - run: `sf-20260320-154315-30532`
+  - mode: `standard10`
+  - 结果：`audit_status = success`
+  - 含义：保留为历史参考，不再承担当前 canonical baseline 角色
 
 ## benchmark gate 摘要
 
@@ -103,20 +123,21 @@
   - 在 seat list 与对外口径冻结前，不作为正式主结论
 - `standard11`
   - 已成为唯一公开 canonical/default profile
-  - 最新 formal rerun `sf-20260320-211359-7232` 失败，因此这轮不宣称已有新的成功 formal baseline
+  - 当前 admitted formal baseline：`sf-20260321-173637-34080`
 
-结论不是“11 席已经稳定”，而是：
+结论不是“11 席在所有任务上都彻底稳定”，而是：
 
-- benchmark taxonomy、seat/profile 合同和治理门禁已经落地
-- 真实失败与退化已经被留痕，而不是被成功表象掩盖
-- 当前 `standard11` 的主要 blocker 是 `claude-gpt` 外部 `503`
-- 因此仓库只公开已经通过验证的运行语义，不把这条失败 rerun 包装成成功
+- benchmark taxonomy、seat/profile 合同、authority contract 与 admission gate 都已经落地
+- 真实失败与退化仍然会被留痕，而不是被成功表象掩盖
+- `sf-20260321-165524-26436` 证明了 formal rerun 仍会继续产出真实 regression 输入
+- `sf-20260321-173637-34080` 则证明新的 standard11 authority baseline 已经能被真实 gate 放行
 
-基于这三条真实样本，本轮只回流以下能力：
+基于这四条真实样本，本轮只回流以下能力：
 
 - progress snapshot 增强
 - run 后 truth audit
 - regression cases/index
+- authority contract / baseline admission gate
 - seat 质量门
 - 搜索位证据约束
 - 幽灵堵车隔离并行

@@ -16,6 +16,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pijiang.factory.admission import (
+    DEFAULT_RUN_GRADE,
+    DEFAULT_RUN_ROLE,
+    authority_manifest_fields,
+    build_baseline_admission_report,
+    build_provider_preflight_snapshot,
+    build_seat_registry,
+    build_topology_report,
+    render_baseline_admission_markdown,
+    render_topology_report_markdown,
+)
 from pijiang.factory.registry import LEGACY_PROFILE_ALIASES, LEGACY_STANDARD10_PROFILE, SEAT_REGISTRY_VERSION, STANDARD11_PROFILE
 from pijiang.factory.runtime_support import trim_to_canonical_markdown, variant_quality_issue
 from pijiang.factory.types import WatcherPolicy
@@ -1003,7 +1014,14 @@ def render_final_draft_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[LaneResult], watcher_filename: str | None = None) -> str:
+def render_index_markdown(
+    *,
+    run_id: str,
+    created_at: str,
+    lane_results: list[LaneResult],
+    watcher_filename: str | None = None,
+    authority_filenames: list[str] | None = None,
+) -> str:
     frontmatter = frontmatter_block(
         {
             "sf_run_id": run_id,
@@ -1018,6 +1036,14 @@ def render_index_markdown(*, run_id: str, created_at: str, lane_results: list[La
     for result in lane_results:
         label = result.lane.obsidian_filename
         lines.append(f"- [{label}]({label}) - {result.status}")
+    lines.extend(
+        [
+            "",
+            "## Authority & 准入",
+        ]
+    )
+    for filename in authority_filenames or []:
+        lines.append(f"- [{filename}]({filename})")
     lines.extend(
         [
             "",
@@ -1149,6 +1175,9 @@ class RunTracker:
             "watcher_action_count": 0,
             "watcher_last_message": "",
             "artifacts": {},
+            "run_role": manifest.get("run_role", ""),
+            "run_grade": manifest.get("run_grade", ""),
+            "allow_degraded": bool(manifest.get("allow_degraded", False)),
         }
         write_json(self.status_path, self.state)
 
@@ -1288,6 +1317,7 @@ class SolutionFactory:
             )
 
         return effective_profile, effective_lanes, {
+            "status": "warning" if issues else "ready",
             "requested_lane_profile": requested_profile,
             "effective_lane_profile": effective_profile,
             "unavailable_lane_ids": unavailable_lane_ids,
@@ -1304,6 +1334,9 @@ class SolutionFactory:
         effective_profile: str,
         lane_specs: list[LaneSpec],
         preflight: dict[str, Any],
+        allow_degraded: bool,
+        run_role: str,
+        run_grade: str,
     ) -> tuple[str, Path, Path, dict[str, Any]]:
         run_id = f"sf-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
         run_dir = ensure_directory(self.cache_root / "runs" / run_id)
@@ -1353,9 +1386,100 @@ class SolutionFactory:
             },
             "obsidian_output_dir": str(output_dir),
         }
+        manifest.update(
+            authority_manifest_fields(
+                run_role=run_role,
+                run_grade=run_grade,
+                allow_degraded=allow_degraded,
+            )
+        )
         write_json(run_dir / "run_manifest.json", manifest)
         write_json(run_dir / "preflight.json", preflight)
         return run_id, run_dir, output_dir, manifest
+
+    def _write_authority_artifacts(
+        self,
+        *,
+        run_dir: Path,
+        output_dir: Path,
+        manifest: dict[str, Any],
+        preflight: dict[str, Any],
+        tracker: RunTracker,
+    ) -> None:
+        created_at = manifest["started_at"]
+        seat_registry = build_seat_registry(manifest)
+        provider_snapshot = build_provider_preflight_snapshot(
+            preflight,
+            source_system="local_council",
+            requested_profile=str(manifest.get("requested_lane_profile", "")).strip(),
+            effective_profile=str(manifest.get("effective_lane_profile", "")).strip(),
+        )
+        topology_report = build_topology_report(manifest)
+
+        write_json(run_dir / "seat-registry.json", seat_registry)
+        write_json(output_dir / "03-seat-registry.json", seat_registry)
+        tracker.add_artifact("seat_registry", str(output_dir / "03-seat-registry.json"))
+
+        write_json(run_dir / "provider-preflight-snapshot.json", provider_snapshot)
+        write_json(output_dir / "04-provider-preflight-snapshot.json", provider_snapshot)
+        tracker.add_artifact("provider_preflight_snapshot", str(output_dir / "04-provider-preflight-snapshot.json"))
+
+        topology_markdown = render_stage_markdown(
+            body=render_topology_report_markdown(topology_report),
+            run_id=str(manifest.get("run_id", "")),
+            stage="topology-report",
+            lane_id="authority",
+            source_cli="local",
+            model="n/a",
+            created_at=created_at,
+        )
+        write_text(output_dir / "02-topology-report.md", topology_markdown)
+        tracker.add_artifact("topology_report", str(output_dir / "02-topology-report.md"))
+
+    def _finalize_baseline_admission(
+        self,
+        *,
+        run_dir: Path,
+        output_dir: Path,
+        manifest: dict[str, Any],
+        summary: dict[str, Any],
+        tracker: RunTracker,
+    ) -> None:
+        from pijiang.factory.analysis import load_truth_audit
+
+        audit = load_truth_audit(Path(summary["truth_audit_path"]))
+        report = build_baseline_admission_report(
+            manifest=manifest,
+            summary=summary,
+            audit_status=audit.audit_status,
+            reason_codes=audit.reason_codes,
+            artifact_paths={
+                "seat_registry": str(output_dir / "03-seat-registry.json"),
+                "provider_preflight_snapshot": str(output_dir / "04-provider-preflight-snapshot.json"),
+                "run_manifest": str(run_dir / "run_manifest.json"),
+                "events_stream": str(run_dir / "events.jsonl"),
+                "topology_report": str(output_dir / "02-topology-report.md"),
+                "final_decisions": str(output_dir / "50-fusion-decisions.md"),
+                "final_draft": str(output_dir / "90-final-solution-draft.md"),
+            },
+            status_payload=tracker.snapshot_payload(),
+        )
+        write_json(run_dir / "baseline-admission-report.json", report)
+        admission_markdown = render_stage_markdown(
+            body=render_baseline_admission_markdown(report),
+            run_id=str(manifest.get("run_id", "")),
+            stage="baseline-admission",
+            lane_id="authority",
+            source_cli="local",
+            model="n/a",
+            created_at=utc_now_iso(),
+        )
+        write_text(output_dir / "75-baseline-admission.md", admission_markdown)
+        tracker.add_artifact("baseline_admission_report", str(output_dir / "75-baseline-admission.md"))
+        summary["baseline_candidate"] = bool(report.get("candidate_ready", False))
+        summary["baseline_admitted"] = bool(report.get("admitted", False))
+        summary["baseline_promotion_status"] = str(report.get("promotion_status", "")).strip()
+        summary["baseline_admission_path"] = str(output_dir / "75-baseline-admission.md")
 
     def _run_subprocess(self, prepared: PreparedCommand, *, timeout_sec: int) -> subprocess.CompletedProcess[str]:
         executable_name = Path(str(prepared.command[0])).stem.lower() if prepared.command else ""
@@ -1707,7 +1831,16 @@ class SolutionFactory:
         tracker.emit("fusion-step-success", stage=stage, provider=provider_used, output=str(output_last_message_path))
         return payload, provider_used, model_used
 
-    def run(self, *, brief_path: Path, lanes: str = STANDARD11_PROFILE, watcher_mode: str | None = None) -> dict[str, Any]:
+    def run(
+        self,
+        *,
+        brief_path: Path,
+        lanes: str = STANDARD11_PROFILE,
+        watcher_mode: str | None = None,
+        allow_degraded: bool = False,
+        run_role: str = DEFAULT_RUN_ROLE,
+        run_grade: str = DEFAULT_RUN_GRADE,
+    ) -> dict[str, Any]:
         recover_abandoned_runs(self.cache_root)
         requested_profile_input = lanes.strip().lower()
         requested_profile, requested_lanes = self._select_lanes(lanes)
@@ -1727,6 +1860,9 @@ class SolutionFactory:
             effective_profile=effective_profile,
             lane_specs=lane_specs,
             preflight=preflight,
+            allow_degraded=allow_degraded,
+            run_role=run_role,
+            run_grade=run_grade,
         )
         self.current_run_id = run_id
         self.current_output_dir = output_dir
@@ -1794,14 +1930,29 @@ class SolutionFactory:
             "watcher_status": "watching" if watcher_active else "off",
             "watcher_alert_count": 0,
             "watcher_action_count": 0,
+            "run_role": run_role,
+            "run_grade": run_grade,
+            "allow_degraded": allow_degraded,
+            "baseline_candidate": False,
+            "baseline_admitted": False,
+            "baseline_promotion_status": "not-eligible",
         }
 
         try:
             tracker.set_stage("brief")
             write_text(output_dir / "00-brief.md", render_brief_markdown(brief_text, run_id=run_id, created_at=manifest["started_at"]))
             tracker.add_artifact("brief_markdown", str(output_dir / "00-brief.md"))
+            self._write_authority_artifacts(
+                run_dir=run_dir,
+                output_dir=output_dir,
+                manifest=manifest,
+                preflight=preflight,
+                tracker=tracker,
+            )
             write_text(output_dir / "05-preflight.md", render_preflight_markdown(preflight, run_id=run_id, created_at=utc_now_iso()))
             tracker.add_artifact("preflight_markdown", str(output_dir / "05-preflight.md"))
+            if manifest.get("degraded_state") and not manifest.get("allow_degraded"):
+                raise RuntimeError("preflight 已把本轮 run 判定为 degraded，但 allow_degraded=false；拒绝以未声明降级身份继续运行。")
             tracker.set_stage("variants")
 
             max_workers = max(1, min(self.config.max_workers, len(lane_specs)))
@@ -1901,7 +2052,15 @@ class SolutionFactory:
                     model=final_draft_model,
                 ),
             )
-            write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results))
+            write_text(
+                output_dir / "99-index.md",
+                render_index_markdown(
+                    run_id=run_id,
+                    created_at=utc_now_iso(),
+                    lane_results=lane_results,
+                    authority_filenames=["02-topology-report.md", "75-baseline-admission.md"],
+                ),
+            )
 
             tracker.set_seat_status("fusion", "success")
             tracker.complete("success")
@@ -1953,6 +2112,13 @@ class SolutionFactory:
         if summary["status"] == "success" and audit.audit_status != "success":
             summary["status"] = audit.audit_status
             tracker.complete(audit.audit_status)
+        self._finalize_baseline_admission(
+            run_dir=run_dir,
+            output_dir=output_dir,
+            manifest=manifest,
+            summary=summary,
+            tracker=tracker,
+        )
         if watcher_recorder is not None:
             if watcher_monitor is not None:
                 watcher_monitor.stop()
@@ -1973,7 +2139,16 @@ class SolutionFactory:
             summary["watcher_alert_count"] = int(tracker.state.get("watcher_alert_count", 0))
             summary["watcher_action_count"] = int(tracker.state.get("watcher_action_count", 0))
             summary["watcher_advice_path"] = watcher_path
-            write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results, watcher_filename="06-juezhe-watch.md"))
+            write_text(
+                output_dir / "99-index.md",
+                render_index_markdown(
+                    run_id=run_id,
+                    created_at=utc_now_iso(),
+                    lane_results=lane_results,
+                    watcher_filename="06-juezhe-watch.md",
+                    authority_filenames=["02-topology-report.md", "75-baseline-admission.md"],
+                ),
+            )
         write_json(run_dir / "summary.json", summary)
         return summary
 
@@ -1987,6 +2162,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--project-path", required=True, help="Obsidian project path relative to the vault root.")
     run.add_argument("--lanes", default="standard11", help="Lane set to run. Supported: single, reduced6, standard11, standard10, default, default6, default9, default10.")
     run.add_argument("--watcher", choices=["auto", "on", "off"], default="auto", help="觉者守护层策略。")
+    run.add_argument("--allow-degraded", action="store_true", help="显式允许本轮以 degraded 身份继续执行。")
     run.set_defaults(func=command_run)
     return parser
 
@@ -1994,7 +2170,12 @@ def build_parser() -> argparse.ArgumentParser:
 def command_run(args: argparse.Namespace) -> int:
     config = default_config(args.project_path)
     config.watcher_policy.cli_mode = args.watcher
-    summary = SolutionFactory(config).run(brief_path=Path(args.brief), lanes=args.lanes, watcher_mode=args.watcher)
+    summary = SolutionFactory(config).run(
+        brief_path=Path(args.brief),
+        lanes=args.lanes,
+        watcher_mode=args.watcher,
+        allow_degraded=bool(args.allow_degraded),
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

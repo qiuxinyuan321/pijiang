@@ -56,6 +56,17 @@
     "silent_replacement_allowed": false,
     "silent_alias_to_standard11_allowed": false
   },
+  "authority_contract": {
+    "default_run_role": "requalification",
+    "default_run_grade": "formal",
+    "baseline_admission_path": [
+      "docs/contracts/20-decision-matrix.json",
+      "docs/contracts/60-execution-contract.md",
+      "docs/contracts/65-namespace-boundary.md",
+      "docs/contracts/70-baseline-admission-charter.md"
+    ],
+    "promotion_policy": "run_role/run_grade must be declared before launch; degraded success cannot directly become authority baseline"
+  },
   "guardian_layer": {
     "seat_id": "watcher",
     "display_name": "觉者",
@@ -66,9 +77,15 @@
   "required_manifest_fields": [
     "requested_profile",
     "effective_profile",
+    "run_role",
+    "run_grade",
+    "allow_degraded",
     "seat_registry_version",
     "resolved_seats",
     "legacy_compat_applied",
-    "degraded_state"
+    "degraded_state",
+    "guardian_layer",
+    "namespace_boundary",
+    "admission_path"
   ]
 }

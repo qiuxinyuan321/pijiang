@@ -162,10 +162,18 @@ def test_solution_factory_can_run_with_fake_clis(tmp_path: Path) -> None:
     assert summary["failed_lane_count"] == 0
     assert summary["requested_lane_profile"] == "reduced6"
     assert summary["effective_lane_profile"] == "reduced6"
+    assert summary["run_role"] == "requalification"
+    assert summary["run_grade"] == "formal"
+    assert summary["baseline_admitted"] is False
+    assert summary["baseline_promotion_status"] == "not-eligible"
     assert summary["truth_audit_path"].endswith("70-run-truth-audit.json")
+    assert summary["baseline_admission_path"].endswith("75-baseline-admission.md")
     assert summary["watcher_enabled"] is True
     assert summary["watcher_advice_path"].endswith("06-juezhe-watch.md")
     assert (output_dir / "00-brief.md").exists()
+    assert (output_dir / "02-topology-report.md").exists()
+    assert (output_dir / "03-seat-registry.json").exists()
+    assert (output_dir / "04-provider-preflight-snapshot.json").exists()
     assert (output_dir / "05-preflight.md").exists()
     assert (output_dir / "06-juezhe-watch.md").exists()
     assert (output_dir / "30-idea-map.md").exists()
@@ -174,6 +182,7 @@ def test_solution_factory_can_run_with_fake_clis(tmp_path: Path) -> None:
     assert (output_dir / "50-fusion-decisions.md").exists()
     assert (output_dir / "90-final-solution-draft.md").exists()
     assert (output_dir / "70-run-truth-audit.json").exists()
+    assert (output_dir / "75-baseline-admission.md").exists()
     assert (output_dir / "99-index.md").exists()
 
 
@@ -241,6 +250,37 @@ def test_preflight_degrades_standard10_to_reduced6_when_opencode_missing(monkeyp
     assert [lane.id for lane in effective_lanes] == [lane.id for lane in DEFAULT_LANES[:6]]
     assert "opencode-kimi" in preflight["unavailable_lane_ids"]
     assert any(issue["code"] == "profile_degraded" for issue in preflight["issues"])
+
+
+def test_solution_factory_rejects_undeclared_degraded_standard11(monkeypatch, tmp_path: Path) -> None:
+    brief_path = tmp_path / "brief.md"
+    brief_path.write_text("# Brief\n\n测试未声明 degraded。", encoding="utf-8")
+    fake_cli = tmp_path / "fake_cli.py"
+    write_fake_cli(fake_cli)
+
+    monkeypatch.setattr(solution_factory_core.shutil, "which", lambda name: None)
+    monkeypatch.setattr(solution_factory_core, "_find_bun_cached_opencode", lambda: None)
+
+    config = SolutionFactoryConfig(
+        workspace_root=tmp_path / "workspace",
+        cache_root=tmp_path / "cache",
+        obsidian_root=tmp_path / "obsidian",
+        project_path=r"议会\\降级拒绝测试",
+        command_overrides={
+            "codex": [sys.executable, str(fake_cli)],
+            "claude": [sys.executable, str(fake_cli)],
+        },
+        timeout_sec=60,
+        max_workers=2,
+    )
+    config.workspace_root.mkdir(parents=True, exist_ok=True)
+
+    summary = SolutionFactory(config).run(brief_path=brief_path, lanes="standard11")
+
+    assert summary["status"] == "fail" or summary["status"] == "failed"
+    assert summary["allow_degraded"] is False
+    assert summary["baseline_admitted"] is False
+    assert "allow_degraded=false" in summary["error"]
 
 
 def test_resolve_command_prefix_finds_bun_cached_opencode(monkeypatch, tmp_path: Path) -> None:

@@ -10,7 +10,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from .admission import (
+    DEFAULT_RUN_GRADE,
+    DEFAULT_RUN_ROLE,
+    authority_manifest_fields,
+    build_baseline_admission_report,
+    build_provider_preflight_snapshot,
+    build_seat_registry,
+    build_topology_report,
+    render_baseline_admission_markdown,
+    render_topology_report_markdown,
+)
 from .analysis import audit_council_run
+from .config import PijiangConfig, active_seats, council_mode, find_provider, unique_active_profile_count
+from .readiness import build_readiness_report
 from .runtime_support import (
     FINAL_DECISIONS_SCHEMA,
     FINAL_DRAFT_SCHEMA,
@@ -36,8 +49,6 @@ from .runtime_support import (
     write_json,
     write_text,
 )
-
-from .config import PijiangConfig, active_seats, council_mode, find_provider, unique_active_profile_count
 from .providers import ProviderExecutionError, adapter_for_profile, execute_profile_request
 from .registry import OPENCODE_MARSHAL_SEAT_IDS, SEAT_REGISTRY_VERSION, STANDARD11_QUORUM_PROFILE
 from .types import CouncilSeat, ExecutionRequest, RunProgressSnapshot
@@ -308,6 +319,9 @@ class CouncilRunTracker:
             "watcher_action_count": 0,
             "watcher_last_message": "",
             "artifacts": {},
+            "run_role": manifest.get("run_role", ""),
+            "run_grade": manifest.get("run_grade", ""),
+            "allow_degraded": bool(manifest.get("allow_degraded", False)),
         }
         write_json(self.status_path, self.state)
 
@@ -473,7 +487,16 @@ class CouncilEngine:
             special_instructions=special,
         )
 
-    def _prepare_run(self, brief_path: Path, seats: list[CouncilSeat], topic: str) -> tuple[str, Path, Path, dict[str, Any]]:
+    def _prepare_run(
+        self,
+        brief_path: Path,
+        seats: list[CouncilSeat],
+        topic: str,
+        *,
+        allow_degraded: bool,
+        run_role: str,
+        run_grade: str,
+    ) -> tuple[str, Path, Path, dict[str, Any]]:
         created_at = utc_now_iso()
         run_id = f"cpj-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         cache_root = Path(self.config.cache_root).expanduser().resolve()
@@ -514,8 +537,106 @@ class CouncilEngine:
                 for seat in seats
             ],
         }
+        manifest.update(
+            authority_manifest_fields(
+                run_role=run_role,
+                run_grade=run_grade,
+                allow_degraded=allow_degraded,
+            )
+        )
         write_json(run_dir / "run_manifest.json", manifest)
         return run_id, run_dir, output_dir, manifest
+
+    def _write_authority_artifacts(
+        self,
+        *,
+        run_dir: Path,
+        output_dir: Path,
+        manifest: dict[str, Any],
+        preflight_snapshot: dict[str, Any],
+        tracker: CouncilRunTracker,
+    ) -> None:
+        created_at = str(manifest.get("started_at", "")).strip()
+        seat_registry = build_seat_registry(manifest)
+        provider_snapshot = build_provider_preflight_snapshot(
+            preflight_snapshot,
+            source_system="pijiang",
+            requested_profile=str(manifest.get("council_mode", "")).strip(),
+            effective_profile=str(manifest.get("council_mode", "")).strip(),
+        )
+        topology_report = build_topology_report(
+            {
+                **manifest,
+                "requested_lane_profile": manifest.get("council_mode", ""),
+                "effective_lane_profile": manifest.get("council_mode", ""),
+            }
+        )
+
+        write_json(run_dir / "seat-registry.json", seat_registry)
+        write_json(output_dir / "03-seat-registry.json", seat_registry)
+        tracker.add_artifact("seat_registry", str(output_dir / "03-seat-registry.json"))
+
+        write_json(run_dir / "provider-preflight-snapshot.json", provider_snapshot)
+        write_json(output_dir / "04-provider-preflight-snapshot.json", provider_snapshot)
+        tracker.add_artifact("provider_preflight_snapshot", str(output_dir / "04-provider-preflight-snapshot.json"))
+
+        topology_markdown = render_stage_markdown(
+            body=render_topology_report_markdown(topology_report),
+            run_id=str(manifest.get("run_id", "")),
+            stage="topology-report",
+            lane_id="authority",
+            source_cli="local",
+            model="n/a",
+            created_at=created_at,
+        )
+        write_text(output_dir / "02-topology-report.md", topology_markdown)
+        tracker.add_artifact("topology_report", str(output_dir / "02-topology-report.md"))
+
+    def _finalize_baseline_admission(
+        self,
+        *,
+        run_dir: Path,
+        output_dir: Path,
+        manifest: dict[str, Any],
+        summary: dict[str, Any],
+        tracker: CouncilRunTracker,
+    ) -> None:
+        report = build_baseline_admission_report(
+            manifest={
+                **manifest,
+                "requested_lane_profile": manifest.get("council_mode", ""),
+                "effective_lane_profile": manifest.get("council_mode", ""),
+            },
+            summary=summary,
+            audit_status=str(summary.get("audit_status", "")).strip(),
+            reason_codes=list(summary.get("reason_codes", [])),
+            artifact_paths={
+                "seat_registry": str(output_dir / "03-seat-registry.json"),
+                "provider_preflight_snapshot": str(output_dir / "04-provider-preflight-snapshot.json"),
+                "run_manifest": str(run_dir / "run_manifest.json"),
+                "events_stream": str(run_dir / "events.jsonl"),
+                "topology_report": str(output_dir / "02-topology-report.md"),
+                "final_decisions": str(output_dir / "50-fusion-decisions.md"),
+                "final_draft": str(output_dir / "90-final-solution-draft.md"),
+            },
+            status_payload=tracker.snapshot_payload(),
+        )
+        write_json(run_dir / "baseline-admission-report.json", report)
+        admission_markdown = render_stage_markdown(
+            body=render_baseline_admission_markdown(report),
+            run_id=str(manifest.get("run_id", "")),
+            stage="baseline-admission",
+            lane_id="authority",
+            source_cli="local",
+            model="n/a",
+            created_at=utc_now_iso(),
+        )
+        write_text(output_dir / "75-baseline-admission.md", admission_markdown)
+        tracker.add_artifact("baseline_admission_report", str(output_dir / "75-baseline-admission.md"))
+        summary["baseline_candidate"] = bool(report.get("candidate_ready", False))
+        summary["baseline_admitted"] = bool(report.get("admitted", False))
+        summary["baseline_promotion_status"] = str(report.get("promotion_status", "")).strip()
+        summary["baseline_admission_path"] = str(output_dir / "75-baseline-admission.md")
 
     def _write_lane_result(
         self,
@@ -855,6 +976,9 @@ class CouncilEngine:
         timeout_sec: int = 900,
         max_workers: int = 6,
         watcher_mode: str | None = None,
+        allow_degraded: bool = False,
+        run_role: str = DEFAULT_RUN_ROLE,
+        run_grade: str = DEFAULT_RUN_GRADE,
     ) -> dict[str, Any]:
         recover_abandoned_runs(Path(self.config.cache_root))
         seats = self._active_seats()
@@ -863,7 +987,36 @@ class CouncilEngine:
         if len({seat.profile_id for seat in seats}) < 1:
             raise RuntimeError("no enabled provider profiles configured")
 
-        run_id, run_dir, output_dir, manifest = self._prepare_run(brief_path, seats, topic)
+        readiness = build_readiness_report(self.config)
+        preflight_snapshot = {
+            "status": readiness.status,
+            "issues": [
+                {"level": item.level, "code": item.code, "message": item.message, "fix_hint": item.fix_hint}
+                for item in [*readiness.blockers, *readiness.warnings]
+            ],
+            "ready_items": list(readiness.ready_items),
+            "endpoint_diagnostics": [
+                {
+                    "profile_id": item.profile_id,
+                    "adapter_type": item.adapter_type,
+                    "endpoint_source": item.endpoint_source,
+                    "effective_base_url": item.effective_base_url,
+                    "normalized": item.normalized,
+                    "valid": item.valid,
+                    "issues": item.issues,
+                }
+                for item in readiness.endpoint_diagnostics
+            ],
+        }
+
+        run_id, run_dir, output_dir, manifest = self._prepare_run(
+            brief_path,
+            seats,
+            topic,
+            allow_degraded=allow_degraded,
+            run_role=run_role,
+            run_grade=run_grade,
+        )
         tracker = CouncilRunTracker(run_dir=run_dir, manifest=manifest, seats=seats, progress_callback=self.progress_callback)
         watcher_active = watcher_enabled(watcher_mode or self.config.watcher_policy.cli_mode, task_kind="run")
         watcher_recorder: WatcherRecorder | None = None
@@ -903,6 +1056,13 @@ class CouncilEngine:
         )
         tracker.add_artifact("brief_markdown", str(output_dir / "00-brief.md"))
         tracker.add_artifact("run_overview", str(output_dir / "01-run-overview.md"))
+        self._write_authority_artifacts(
+            run_dir=run_dir,
+            output_dir=output_dir,
+            manifest=manifest,
+            preflight_snapshot=preflight_snapshot,
+            tracker=tracker,
+        )
 
         tracker.set_stage("variants", f"正在并行生成 {len(seats)} 路议会材料")
         lane_results: list[LaneResult] = []
@@ -1120,7 +1280,15 @@ class CouncilEngine:
                     model=draft_model,
                 ),
             )
-        write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results))
+        write_text(
+            output_dir / "99-index.md",
+            render_index_markdown(
+                run_id=run_id,
+                created_at=utc_now_iso(),
+                lane_results=lane_results,
+                authority_filenames=["02-topology-report.md", "75-baseline-admission.md"],
+            ),
+        )
         tracker.add_artifact("final_index", str(output_dir / "99-index.md"))
         summary = {
             "run_id": run_id,
@@ -1143,6 +1311,12 @@ class CouncilEngine:
             "watcher_status": tracker.state.get("watcher_state", "idle"),
             "watcher_alert_count": int(tracker.state.get("watcher_alert_count", 0)),
             "watcher_action_count": int(tracker.state.get("watcher_action_count", 0)),
+            "run_role": run_role,
+            "run_grade": run_grade,
+            "allow_degraded": allow_degraded,
+            "baseline_candidate": False,
+            "baseline_admitted": False,
+            "baseline_promotion_status": "not-eligible",
         }
         if pipeline_error:
             summary["error"] = pipeline_error
@@ -1158,6 +1332,13 @@ class CouncilEngine:
         summary["reason_codes"] = audit.reason_codes
         if pipeline_status == "success" and audit.audit_status != "success":
             summary["status"] = audit.audit_status
+        self._finalize_baseline_admission(
+            run_dir=run_dir,
+            output_dir=output_dir,
+            manifest=manifest,
+            summary=summary,
+            tracker=tracker,
+        )
         tracker.add_artifact("truth_audit", summary["truth_audit_path"])
         tracker.add_artifact("regression_cases_index", str(output_dir / "80-regression-cases-index.md"))
         if watcher_recorder is not None:
@@ -1179,7 +1360,16 @@ class CouncilEngine:
             summary["watcher_alert_count"] = int(tracker.state.get("watcher_alert_count", 0))
             summary["watcher_action_count"] = int(tracker.state.get("watcher_action_count", 0))
             summary["watcher_advice_path"] = watcher_path
-            write_text(output_dir / "99-index.md", render_index_markdown(run_id=run_id, created_at=utc_now_iso(), lane_results=lane_results, watcher_filename="06-juezhe-watch.md"))
+            write_text(
+                output_dir / "99-index.md",
+                render_index_markdown(
+                    run_id=run_id,
+                    created_at=utc_now_iso(),
+                    lane_results=lane_results,
+                    watcher_filename="06-juezhe-watch.md",
+                    authority_filenames=["02-topology-report.md", "75-baseline-admission.md"],
+                ),
+            )
         if summary["status"] != pipeline_status:
             tracker.complete(summary["status"], f"议会运行完成，状态为 {summary['status']}")
         write_json(run_dir / "summary.json", summary)
