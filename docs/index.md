@@ -37,6 +37,7 @@
 | 主题 | 文档 | 作用 |
 | --- | --- | --- |
 | 当前基线与觉者 | [current-baseline-and-watcher.md](current-baseline-and-watcher.md) | 先看当前这轮最新真实 baseline 与守护层能力 |
+| 正确调用真实议会 | [invoke-real-council.md](invoke-real-council.md) | 避免把“开会”误路由成通用多角色评审 |
 | 核心理念与演化 | [project-philosophy.md](project-philosophy.md) | 看懂项目为什么存在、为什么会继续进化 |
 | AI 代理视角 | [for-ai-agents.md](for-ai-agents.md) | 从 AI 第一人称视角理解这套制度的优点 |
 | 首页图解 | [demo-visuals.md](demo-visuals.md) | 看懂 11 席议会、黄金路径、demo 产物链 |
@@ -66,6 +67,7 @@
 | --- | --- | --- |
 | [README.md](../README.md) | 项目首页、价值认知、快速入口 | 所有人 |
 | [current-baseline-and-watcher.md](current-baseline-and-watcher.md) | 当前最新真实 baseline 与觉者守护层快照 | 想先看本轮可信结论的人 |
+| [invoke-real-council.md](invoke-real-council.md) | 如何让别的对话正确调用皮匠真实议会 | 经常说“开会”但不想跑偏的人 |
 | [project-philosophy.md](project-philosophy.md) | 核心理念、起源实验、项目演化样本 | 想先理解项目为什么存在的人 |
 | [for-ai-agents.md](for-ai-agents.md) | 从 AI 代理视角看这个项目的优点 | AI 代理、维护者 |
 | [first-success-path.md](first-success-path.md) | 新用户第一次怎样最稳地跑通 | 新用户 |

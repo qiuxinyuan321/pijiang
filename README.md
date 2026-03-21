@@ -41,6 +41,7 @@
 | --- | --- |
 | 我想看完整文档导航 | [docs/index.md](docs/index.md) |
 | 我想先看当前最新真实 baseline 与觉者能力 | [docs/current-baseline-and-watcher.md](docs/current-baseline-and-watcher.md) |
+| 我想让别的对话正确调用真实议会 | [docs/invoke-real-council.md](docs/invoke-real-council.md) |
 | 我想看 standard11 合同和执行门禁 | [docs/contracts/60-execution-contract.md](docs/contracts/60-execution-contract.md) |
 | 我想先理解它的核心理念 | [docs/project-philosophy.md](docs/project-philosophy.md) |
 | 我想看它是怎么一轮轮进化的 | [docs/project-philosophy.md](docs/project-philosophy.md) |
