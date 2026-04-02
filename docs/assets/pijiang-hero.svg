@@ -1,8 +1,8 @@
-<svg width="1280" height="820" viewBox="0 0 1280 820" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="1280" height="860" viewBox="0 0 1280 860" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">皮匠 GitHub 首页主视觉</title>
   <desc id="desc">展示皮匠的多模型议会能力层、席位职责分工、demo-first 路径与 truth audit 能力。</desc>
   <defs>
-    <linearGradient id="bg" x1="86" y1="54" x2="1194" y2="766" gradientUnits="userSpaceOnUse">
+    <linearGradient id="bg" x1="86" y1="54" x2="1194" y2="806" gradientUnits="userSpaceOnUse">
       <stop stop-color="#F8F3E8"/>
       <stop offset="1" stop-color="#EFE2CC"/>
     </linearGradient>
@@ -14,84 +14,118 @@
       <stop stop-color="#C8844D"/>
       <stop offset="1" stop-color="#9B5331"/>
     </linearGradient>
-    <filter id="shadow" x="36" y="24" width="1208" height="748" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <linearGradient id="darkCard" x1="0" y1="0" x2="0.5" y2="1">
+      <stop stop-color="#2E1F17"/>
+      <stop offset="1" stop-color="#1A110B"/>
+    </linearGradient>
+    <filter id="shadow" x="36" y="24" width="1208" height="812" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feOffset dy="12"/>
       <feGaussianBlur stdDeviation="18"/>
       <feColorMatrix type="matrix" values="0 0 0 0 0.211765 0 0 0 0 0.152941 0 0 0 0 0.105882 0 0 0 0.12 0"/>
       <feBlend in2="SourceGraphic" result="shape"/>
     </filter>
-    <filter id="softGlow" x="0" y="0" width="1280" height="820" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <filter id="cardShadow" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feOffset dy="4"/>
+      <feGaussianBlur stdDeviation="8"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.15 0 0 0 0 0.1 0 0 0 0 0.06 0 0 0 0.1 0"/>
+      <feBlend in2="SourceGraphic" result="shape"/>
+    </filter>
+    <filter id="softGlow" x="0" y="0" width="1280" height="860" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="40"/>
     </filter>
   </defs>
 
+  <!-- 背景光晕 -->
   <g filter="url(#softGlow)" opacity="0.22">
     <circle cx="294" cy="160" r="108" fill="#F3D9B4"/>
     <circle cx="1050" cy="178" r="96" fill="#F7E8D0"/>
   </g>
 
-  <rect x="72" y="48" width="1136" height="724" rx="32" fill="url(#bg)" stroke="#D9C9AE" filter="url(#shadow)"/>
+  <!-- 主背景 -->
+  <rect x="72" y="48" width="1136" height="764" rx="32" fill="url(#bg)" stroke="#D9C9AE" filter="url(#shadow)"/>
 
+  <!-- ========== 顶部左区：标题与 Tagline ========== -->
   <rect x="112" y="104" width="184" height="40" rx="20" fill="#231712"/>
   <text x="204" y="130" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#F7EBDD">多模型议会能力层</text>
 
   <text x="112" y="226" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="76" font-weight="800" fill="#1F140F">皮匠</text>
 
-  <text x="112" y="290" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#6C432C">不是单模型扮演多个角色</text>
-  <text x="112" y="330" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#6C432C">而是多个真实模型位承担分析职责</text>
+  <text x="112" y="290" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#6C432C">不是单模型扮演多个角色</text>
+  <text x="112" y="326" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#6C432C">而是多个真实模型位承担分析职责</text>
 
-  <text x="112" y="386" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="23" font-weight="600" fill="#4F372B">把复杂议题压成可执行方案链</text>
-  <text x="112" y="420" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="23" font-weight="600" fill="#4F372B">发散 -&gt; 对抗 -&gt; 整合 -&gt; 收敛</text>
+  <text x="112" y="378" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="22" font-weight="600" fill="#4F372B">把复杂议题压成可执行方案链</text>
+  <text x="112" y="410" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="22" font-weight="600" fill="#4F372B">发散 → 对抗 → 整合 → 收敛</text>
 
-  <rect x="112" y="466" width="168" height="46" rx="23" fill="#FFF8EF" stroke="#D8C3A2"/>
-  <text x="196" y="495" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8C4E30">11 席公开议会</text>
-  <rect x="304" y="466" width="168" height="46" rx="23" fill="#FFF8EF" stroke="#D8C3A2"/>
-  <text x="388" y="495" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8C4E30">demo-first</text>
-  <rect x="496" y="466" width="168" height="46" rx="23" fill="#FFF8EF" stroke="#D8C3A2"/>
-  <text x="580" y="495" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#8C4E30">truth audit</text>
+  <!-- 三个标签 -->
+  <rect x="112" y="446" width="168" height="44" rx="22" fill="#FFF8EF" stroke="#D8C3A2"/>
+  <text x="196" y="474" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#8C4E30">11 席公开议会</text>
+  <rect x="300" y="446" width="152" height="44" rx="22" fill="#FFF8EF" stroke="#D8C3A2"/>
+  <text x="376" y="474" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#8C4E30">demo-first</text>
+  <rect x="472" y="446" width="152" height="44" rx="22" fill="#FFF8EF" stroke="#D8C3A2"/>
+  <text x="548" y="474" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#8C4E30">truth audit</text>
 
-  <rect x="744" y="110" width="396" height="296" rx="28" fill="url(#panel)" stroke="#D8C4A7"/>
-  <text x="780" y="168" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#1F140F">职责不是人格，席位不是扮演</text>
-  <text x="780" y="202" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="500" fill="#6A4A39">多个真实模型位各自承担固定职责</text>
-  <text x="780" y="228" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="500" fill="#6A4A39">不是同一个模型切换口吻来“演十一个人”</text>
+  <!-- ========== 顶部右区：席位面板 ========== -->
+  <rect x="710" y="100" width="430" height="300" rx="28" fill="url(#panel)" stroke="#D8C4A7" filter="url(#cardShadow)"/>
+  <text x="750" y="152" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#1F140F">职责不是人格，席位不是扮演</text>
+  <text x="750" y="184" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#6A4A39">多个真实模型位各自承担固定职责</text>
+  <text x="750" y="208" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#6A4A39">不是同一个模型切换口吻来"演十一个人"</text>
 
-  <rect x="780" y="256" width="112" height="38" rx="19" fill="#F3E1CA"/>
-  <text x="836" y="280" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">controller</text>
-  <rect x="908" y="256" width="112" height="38" rx="19" fill="#F3E1CA"/>
-  <text x="964" y="280" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">planning</text>
-  <rect x="1036" y="256" width="84" height="38" rx="19" fill="#F3E1CA"/>
-  <text x="1078" y="280" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">fusion</text>
+  <!-- 第一排席位 -->
+  <rect x="750" y="234" width="112" height="36" rx="18" fill="#F3E1CA"/>
+  <text x="806" y="257" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">controller</text>
+  <rect x="876" y="234" width="112" height="36" rx="18" fill="#F3E1CA"/>
+  <text x="932" y="257" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">planning</text>
+  <rect x="1002" y="234" width="112" height="36" rx="18" fill="#F3E1CA"/>
+  <text x="1058" y="257" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">fusion</text>
 
-  <rect x="780" y="312" width="170" height="38" rx="19" fill="#F8EAD7"/>
-  <text x="865" y="336" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">search-1 / search-2</text>
-  <rect x="968" y="312" width="152" height="38" rx="19" fill="#F8EAD7"/>
-  <text x="1044" y="330" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#6A3E26">opencode-kimi / glm5</text>
-  <text x="1044" y="348" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#6A3E26">minimax / qwen</text>
+  <!-- 第二排席位 -->
+  <rect x="750" y="284" width="170" height="36" rx="18" fill="#F8EAD7"/>
+  <text x="835" y="307" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#6A3E26">search-1 / search-2</text>
+  <rect x="934" y="284" width="180" height="36" rx="18" fill="#F8EAD7"/>
+  <text x="1024" y="307" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#6A3E26">kimi / glm5 / minimax / qwen</text>
 
-  <rect x="780" y="368" width="132" height="38" rx="19" fill="#FCEFD9"/>
-  <text x="846" y="392" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">chaos</text>
-  <rect x="930" y="368" width="132" height="38" rx="19" fill="#FCEFD9"/>
-  <text x="996" y="392" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700" fill="#6A3E26">skeptic</text>
+  <!-- 第三排席位 -->
+  <rect x="750" y="340" width="112" height="36" rx="18" fill="#FCEFD9"/>
+  <text x="806" y="363" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">chaos</text>
+  <rect x="876" y="340" width="112" height="36" rx="18" fill="#FCEFD9"/>
+  <text x="932" y="363" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#6A3E26">skeptic</text>
 
-  <rect x="112" y="548" width="304" height="176" rx="28" fill="#FFF9F1" stroke="#D8C4A7"/>
-  <text x="148" y="598" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#1F140F">多路产物链</text>
-  <text x="148" y="634" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">brief -&gt; variants -&gt; idea-map</text>
-  <text x="148" y="664" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">debate-rounds -&gt; fusion-decisions</text>
-  <text x="148" y="694" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#5F4A3D">不是只吐一段答案</text>
-  <text x="148" y="716" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#5F4A3D">而是留下完整可复盘链路。</text>
+  <!-- ========== 底部三卡片：等宽、等间距 ========== -->
 
-  <rect x="488" y="548" width="304" height="176" rx="28" fill="#FFF9F1" stroke="#D8C4A7"/>
-  <text x="524" y="598" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#1F140F">运行后审计</text>
-  <text x="524" y="634" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">status.json 持续可见</text>
-  <text x="524" y="664" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="600" fill="#6A3E26">truth audit / regression cases</text>
-  <text x="524" y="694" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#5F4A3D">有退化就留痕</text>
-  <text x="524" y="716" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#5F4A3D">不用“看起来成功”掩盖问题。</text>
+  <!-- 卡片1：多路产物链 -->
+  <rect x="112" y="530" width="330" height="240" rx="28" fill="#FFF9F1" stroke="#D8C4A7" filter="url(#cardShadow)"/>
+  <text x="152" y="578" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#1F140F">多路产物链</text>
+  <line x1="152" y1="592" x2="272" y2="592" stroke="#D8C3A2" stroke-width="2"/>
+  <text x="152" y="624" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="600" fill="#6A3E26">brief → variants → idea-map</text>
+  <text x="152" y="652" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="600" fill="#6A3E26">debate-rounds → fusion-decisions</text>
+  <text x="152" y="694" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="500" fill="#7A5D4D">不是只吐一段答案</text>
+  <text x="152" y="718" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="500" fill="#7A5D4D">而是留下完整可复盘链路</text>
+  <!-- 小图标装饰 -->
+  <text x="382" y="578" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26" fill="#C8A882">⛓️</text>
 
-  <rect x="844" y="534" width="296" height="192" rx="30" fill="#231712"/>
-  <text x="880" y="586" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="28" font-weight="700" fill="#F7EBDD">首次成功路径</text>
-  <rect x="880" y="612" width="224" height="42" rx="21" fill="url(#accent)"/>
-  <text x="992" y="638" text-anchor="middle" font-family="Consolas, Segoe UI, monospace" font-size="15" font-weight="700" fill="#FFF7F0">cpj init -&gt; cpj doctor</text>
-  <rect x="880" y="664" width="224" height="42" rx="21" fill="#7A4B32"/>
-  <text x="992" y="690" text-anchor="middle" font-family="Consolas, Segoe UI, monospace" font-size="15" font-weight="700" fill="#FFF7F0">cpj demo -&gt; cpj run</text>
-  <text x="880" y="714" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="500" fill="#F4DDC9">先看到价值，再接真实 provider。</text>
+  <!-- 卡片2：运行后审计 -->
+  <rect x="476" y="530" width="330" height="240" rx="28" fill="#FFF9F1" stroke="#D8C4A7" filter="url(#cardShadow)"/>
+  <text x="516" y="578" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#1F140F">运行后审计</text>
+  <line x1="516" y1="592" x2="636" y2="592" stroke="#D8C3A2" stroke-width="2"/>
+  <text x="516" y="624" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="600" fill="#6A3E26">status.json 持续可见</text>
+  <text x="516" y="652" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="600" fill="#6A3E26">truth audit / regression cases</text>
+  <text x="516" y="694" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="500" fill="#7A5D4D">有退化就留痕</text>
+  <text x="516" y="718" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="500" fill="#7A5D4D">不用"看起来成功"掩盖问题</text>
+  <text x="746" y="578" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26" fill="#C8A882">🔍</text>
+
+  <!-- 卡片3：首次成功路径（深色卡片） -->
+  <rect x="840" y="530" width="330" height="240" rx="28" fill="url(#darkCard)" filter="url(#cardShadow)"/>
+  <text x="880" y="578" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#F7EBDD">首次成功路径</text>
+  <line x1="880" y1="592" x2="1000" y2="592" stroke="#6A4A39" stroke-width="2"/>
+
+  <!-- 路径按钮1 -->
+  <rect x="880" y="614" width="256" height="44" rx="22" fill="url(#accent)"/>
+  <text x="1008" y="641" text-anchor="middle" font-family="Consolas, Segoe UI Mono, monospace" font-size="16" font-weight="700" fill="#FFF7F0">cpj init → cpj doctor</text>
+
+  <!-- 路径按钮2 -->
+  <rect x="880" y="672" width="256" height="44" rx="22" fill="#7A4B32"/>
+  <text x="1008" y="699" text-anchor="middle" font-family="Consolas, Segoe UI Mono, monospace" font-size="16" font-weight="700" fill="#FFF7F0">cpj demo → cpj run</text>
+
+  <text x="880" y="744" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="500" fill="#D4B99A">先看到价值，再接真实 provider</text>
+  <text x="1108" y="578" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26" fill="#8C6E50">🚀</text>
 </svg>
