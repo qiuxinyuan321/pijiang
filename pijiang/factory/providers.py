@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -15,6 +16,9 @@ from typing import Any
 
 from .endpoints import build_chat_endpoint
 from .types import ExecutionRequest, ExecutionResponse, ProviderCapabilities, ProviderProfile
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderExecutionError(RuntimeError):

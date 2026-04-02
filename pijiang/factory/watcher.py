@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
 from dataclasses import asdict
+from datetime import datetime as _datetime
 from pathlib import Path
 from typing import Any, Callable
 
 from .runtime_support import utc_now_iso, write_json, write_text
 from .types import WatcherAction, WatcherAdvice, WatcherAlert, WatcherLedgerEntry, WatcherPolicy
 
+
+logger = logging.getLogger(__name__)
 
 WATCHER_HEARTBEAT_SEC = 5
 TERMINAL_RUN_STATUSES = {"success", "degraded", "needs-review", "fail", "failed"}
@@ -71,7 +75,7 @@ def _parse_iso_timestamp(value: str) -> float:
     if not value:
         return 0.0
     try:
-        return __import__("datetime").datetime.fromisoformat(value.strip().replace("Z", "+00:00")).timestamp()
+        return _datetime.fromisoformat(value.strip().replace("Z", "+00:00")).timestamp()
     except (ValueError, TypeError):
         return 0.0
 

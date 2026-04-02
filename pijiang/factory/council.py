@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import logging
 import os
 import threading
 import time
@@ -54,6 +55,8 @@ from .registry import OPENCODE_MARSHAL_SEAT_IDS, SEAT_REGISTRY_VERSION, STANDARD
 from .types import CouncilSeat, ExecutionRequest, RunProgressSnapshot
 from .watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, watcher_enabled
 
+
+logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[RunProgressSnapshot, dict[str, Any]], None]
 HEARTBEAT_INTERVAL_SEC = 15
@@ -968,79 +971,19 @@ class CouncilEngine:
                 )
         raise ProviderExecutionError(f"fusion step {stage} failed: {last_error}")
 
-    def run(
+    def _run_bootstrap(
         self,
         *,
         brief_path: Path,
-        topic: str,
-        timeout_sec: int = 900,
-        max_workers: int = 6,
-        watcher_mode: str | None = None,
-        allow_degraded: bool = False,
-        run_role: str = DEFAULT_RUN_ROLE,
-        run_grade: str = DEFAULT_RUN_GRADE,
-    ) -> dict[str, Any]:
-        recover_abandoned_runs(Path(self.config.cache_root))
-        seats = self._active_seats()
-        brief_path = brief_path.expanduser().resolve()
-        brief_text = brief_path.read_text(encoding="utf-8")
-        if len({seat.profile_id for seat in seats}) < 1:
-            raise RuntimeError("no enabled provider profiles configured")
-
-        readiness = build_readiness_report(self.config)
-        preflight_snapshot = {
-            "status": readiness.status,
-            "issues": [
-                {"level": item.level, "code": item.code, "message": item.message, "fix_hint": item.fix_hint}
-                for item in [*readiness.blockers, *readiness.warnings]
-            ],
-            "ready_items": list(readiness.ready_items),
-            "endpoint_diagnostics": [
-                {
-                    "profile_id": item.profile_id,
-                    "adapter_type": item.adapter_type,
-                    "endpoint_source": item.endpoint_source,
-                    "effective_base_url": item.effective_base_url,
-                    "normalized": item.normalized,
-                    "valid": item.valid,
-                    "issues": item.issues,
-                }
-                for item in readiness.endpoint_diagnostics
-            ],
-        }
-
-        run_id, run_dir, output_dir, manifest = self._prepare_run(
-            brief_path,
-            seats,
-            topic,
-            allow_degraded=allow_degraded,
-            run_role=run_role,
-            run_grade=run_grade,
-        )
-        tracker = CouncilRunTracker(run_dir=run_dir, manifest=manifest, seats=seats, progress_callback=self.progress_callback)
-        watcher_active = watcher_enabled(watcher_mode or self.config.watcher_policy.cli_mode, task_kind="run")
-        watcher_recorder: WatcherRecorder | None = None
-        watcher_monitor: WatcherMonitor | None = None
-        if watcher_active:
-            watcher_policy = self.config.watcher_policy
-            watcher_recorder = WatcherRecorder(
-                run_dir=run_dir,
-                output_dir=output_dir,
-                policy=watcher_policy,
-                status_updater=tracker.update_watcher,
-            )
-            watcher_recorder.set_state("watching", "觉者已启用，正在代表用户观察整条任务执行链。")
-            watcher_monitor = WatcherMonitor(
-                recorder=watcher_recorder,
-                status_provider=tracker.snapshot_payload,
-                events_path=tracker.events_path,
-                target_dir_provider=lambda target_id: run_dir / "seats" / target_id,
-                task_label="seat",
-                heartbeat_sec=max(1, min(self.config.watcher_policy.seat_stall_threshold_sec, self.config.watcher_policy.stage_silent_threshold_sec, 5)),
-            )
-            watcher_monitor.start()
-        parallel_policy = str(manifest.get("parallel_policy", "strict_all"))
-        quorum_profile = str(manifest.get("quorum_profile", "strict-all"))
+        brief_text: str,
+        seats: list[CouncilSeat],
+        run_id: str,
+        run_dir: Path,
+        output_dir: Path,
+        manifest: dict[str, Any],
+        preflight_snapshot: dict[str, Any],
+        tracker: CouncilRunTracker,
+    ) -> None:
         tracker.set_stage("brief", "正在写入 brief 与运行概览")
         write_text(output_dir / "00-brief.md", render_brief_markdown(brief_text, run_id=run_id, created_at=manifest["started_at"]))
         write_text(
@@ -1064,6 +1007,20 @@ class CouncilEngine:
             tracker=tracker,
         )
 
+    def _run_variants(
+        self,
+        *,
+        seats: list[CouncilSeat],
+        brief_text: str,
+        run_id: str,
+        run_dir: Path,
+        output_dir: Path,
+        tracker: CouncilRunTracker,
+        timeout_sec: int,
+        max_workers: int,
+        parallel_policy: str,
+        quorum_profile: str,
+    ) -> tuple[list[LaneResult], dict[str, Any], list[str], list[str], bool, int]:
         tracker.set_stage("variants", f"正在并行生成 {len(seats)} 路议会材料")
         lane_results: list[LaneResult] = []
         success_seat_ids: set[str] = set()
@@ -1157,6 +1114,21 @@ class CouncilEngine:
                 if item.status == "success" and (not included_seat_ids or item.lane.id in included_seat_ids)
             ],
         }
+        return lane_results, fusion_context, ghosted_seat_ids, late_seat_ids, quorum_reached, fusion_cutover_ms
+
+    def _run_fusion_pipeline(
+        self,
+        *,
+        fusion_context: dict[str, Any],
+        run_id: str,
+        run_dir: Path,
+        output_dir: Path,
+        tracker: CouncilRunTracker,
+        parallel_policy: str,
+        quorum_reached: bool,
+        quorum_profile: str,
+        watcher_recorder: WatcherRecorder | None,
+    ) -> tuple[str, str]:
         fusion_dir = ensure_directory(run_dir / "fusion")
         write_json(fusion_dir / "fusion_context.json", fusion_context)
         tracker.add_artifact("fusion_context", str(fusion_dir / "fusion_context.json"))
@@ -1280,6 +1252,33 @@ class CouncilEngine:
                     model=draft_model,
                 ),
             )
+        return pipeline_status, pipeline_error
+
+    def _run_finalize(
+        self,
+        *,
+        lane_results: list[LaneResult],
+        run_id: str,
+        run_dir: Path,
+        output_dir: Path,
+        manifest: dict[str, Any],
+        tracker: CouncilRunTracker,
+        pipeline_status: str,
+        pipeline_error: str,
+        ghosted_seat_ids: list[str],
+        late_seat_ids: list[str],
+        quorum_reached: bool,
+        fusion_cutover_ms: int,
+        parallel_policy: str,
+        quorum_profile: str,
+        watcher_active: bool,
+        watcher_recorder: WatcherRecorder | None,
+        watcher_monitor: WatcherMonitor | None,
+        seats: list[CouncilSeat],
+        run_role: str,
+        run_grade: str,
+        allow_degraded: bool,
+    ) -> dict[str, Any]:
         write_text(
             output_dir / "99-index.md",
             render_index_markdown(
@@ -1290,7 +1289,7 @@ class CouncilEngine:
             ),
         )
         tracker.add_artifact("final_index", str(output_dir / "99-index.md"))
-        summary = {
+        summary: dict[str, Any] = {
             "run_id": run_id,
             "status": pipeline_status,
             "run_dir": str(run_dir),
@@ -1298,7 +1297,7 @@ class CouncilEngine:
             "failed_lane_count": sum(1 for result in lane_results if result.status == "failed"),
             "council_mode": manifest["council_mode"],
             "seat_count": len(seats),
-            "topic": topic,
+            "topic": manifest.get("project_path", ""),
             "parallel_policy": parallel_policy,
             "quorum_profile": quorum_profile,
             "quorum_reached": quorum_reached,
@@ -1374,3 +1373,111 @@ class CouncilEngine:
             tracker.complete(summary["status"], f"议会运行完成，状态为 {summary['status']}")
         write_json(run_dir / "summary.json", summary)
         return summary
+
+    def run(
+        self,
+        *,
+        brief_path: Path,
+        topic: str,
+        timeout_sec: int = 900,
+        max_workers: int = 6,
+        watcher_mode: str | None = None,
+        allow_degraded: bool = False,
+        run_role: str = DEFAULT_RUN_ROLE,
+        run_grade: str = DEFAULT_RUN_GRADE,
+    ) -> dict[str, Any]:
+        recover_abandoned_runs(Path(self.config.cache_root))
+        seats = self._active_seats()
+        brief_path = brief_path.expanduser().resolve()
+        brief_text = brief_path.read_text(encoding="utf-8")
+        if len({seat.profile_id for seat in seats}) < 1:
+            raise RuntimeError("no enabled provider profiles configured")
+        logger.info("议会启动：%d 席位，brief=%s", len(seats), brief_path)
+
+        readiness = build_readiness_report(self.config)
+        preflight_snapshot = {
+            "status": readiness.status,
+            "issues": [
+                {"level": item.level, "code": item.code, "message": item.message, "fix_hint": item.fix_hint}
+                for item in [*readiness.blockers, *readiness.warnings]
+            ],
+            "ready_items": list(readiness.ready_items),
+            "endpoint_diagnostics": [
+                {
+                    "profile_id": item.profile_id,
+                    "adapter_type": item.adapter_type,
+                    "endpoint_source": item.endpoint_source,
+                    "effective_base_url": item.effective_base_url,
+                    "normalized": item.normalized,
+                    "valid": item.valid,
+                    "issues": item.issues,
+                }
+                for item in readiness.endpoint_diagnostics
+            ],
+        }
+
+        run_id, run_dir, output_dir, manifest = self._prepare_run(
+            brief_path, seats, topic,
+            allow_degraded=allow_degraded, run_role=run_role, run_grade=run_grade,
+        )
+        tracker = CouncilRunTracker(run_dir=run_dir, manifest=manifest, seats=seats, progress_callback=self.progress_callback)
+
+        # --- Watcher setup ---
+        watcher_active = watcher_enabled(watcher_mode or self.config.watcher_policy.cli_mode, task_kind="run")
+        watcher_recorder: WatcherRecorder | None = None
+        watcher_monitor: WatcherMonitor | None = None
+        if watcher_active:
+            watcher_policy = self.config.watcher_policy
+            watcher_recorder = WatcherRecorder(
+                run_dir=run_dir, output_dir=output_dir,
+                policy=watcher_policy, status_updater=tracker.update_watcher,
+            )
+            watcher_recorder.set_state("watching", "觉者已启用，正在代表用户观察整条任务执行链。")
+            watcher_monitor = WatcherMonitor(
+                recorder=watcher_recorder,
+                status_provider=tracker.snapshot_payload,
+                events_path=tracker.events_path,
+                target_dir_provider=lambda target_id: run_dir / "seats" / target_id,
+                task_label="seat",
+                heartbeat_sec=max(1, min(watcher_policy.seat_stall_threshold_sec, watcher_policy.stage_silent_threshold_sec, 5)),
+            )
+            watcher_monitor.start()
+
+        parallel_policy = str(manifest.get("parallel_policy", "strict_all"))
+        quorum_profile = str(manifest.get("quorum_profile", "strict-all"))
+
+        # --- Stage 1: Bootstrap ---
+        self._run_bootstrap(
+            brief_path=brief_path, brief_text=brief_text, seats=seats,
+            run_id=run_id, run_dir=run_dir, output_dir=output_dir,
+            manifest=manifest, preflight_snapshot=preflight_snapshot, tracker=tracker,
+        )
+
+        # --- Stage 2: Variants ---
+        lane_results, fusion_context, ghosted_seat_ids, late_seat_ids, quorum_reached, fusion_cutover_ms = self._run_variants(
+            seats=seats, brief_text=brief_text, run_id=run_id,
+            run_dir=run_dir, output_dir=output_dir, tracker=tracker,
+            timeout_sec=timeout_sec, max_workers=max_workers,
+            parallel_policy=parallel_policy, quorum_profile=quorum_profile,
+        )
+
+        # --- Stage 3: Fusion pipeline ---
+        pipeline_status, pipeline_error = self._run_fusion_pipeline(
+            fusion_context=fusion_context, run_id=run_id,
+            run_dir=run_dir, output_dir=output_dir, tracker=tracker,
+            parallel_policy=parallel_policy, quorum_reached=quorum_reached,
+            quorum_profile=quorum_profile, watcher_recorder=watcher_recorder,
+        )
+
+        # --- Stage 4: Finalize ---
+        return self._run_finalize(
+            lane_results=lane_results, run_id=run_id,
+            run_dir=run_dir, output_dir=output_dir, manifest=manifest,
+            tracker=tracker, pipeline_status=pipeline_status, pipeline_error=pipeline_error,
+            ghosted_seat_ids=ghosted_seat_ids, late_seat_ids=late_seat_ids,
+            quorum_reached=quorum_reached, fusion_cutover_ms=fusion_cutover_ms,
+            parallel_policy=parallel_policy, quorum_profile=quorum_profile,
+            watcher_active=watcher_active, watcher_recorder=watcher_recorder,
+            watcher_monitor=watcher_monitor, seats=seats,
+            run_role=run_role, run_grade=run_grade, allow_degraded=allow_degraded,
+        )
