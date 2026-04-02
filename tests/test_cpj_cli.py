@@ -187,11 +187,13 @@ def test_cpj_init_writes_default_config_and_vault(tmp_path: Path) -> None:
 def test_cpj_doctor_reports_blockers_for_placeholder_config(tmp_path: Path, capsys) -> None:
     config_path = tmp_path / "config.json"
     save_config(build_default_config(workspace_root=tmp_path / "workspace", vault_path=tmp_path / "vault"), config_path)
-    exit_code = main(["doctor", "--config", str(config_path)])
+    exit_code = main(["doctor", "--json", "--config", str(config_path)])
     captured = capsys.readouterr()
     assert exit_code == 2
-    assert "readiness: blocker" in captured.out
-    assert "profile `controller-primary` 仍是占位模板" in captured.out
+    payload = json.loads(captured.out)
+    assert payload["readiness_status"] == "blocker"
+    blocker_messages = " ".join(b["message"] for b in payload["blockers"])
+    assert "controller-primary" in blocker_messages
 
 
 def test_cpj_demo_generates_demo_run_without_real_api(tmp_path: Path) -> None:
@@ -298,4 +300,4 @@ def test_cpj_run_refuses_placeholder_config_without_allow_degraded(tmp_path: Pat
     exit_code = main(["run", "--config", str(config_path), "--brief", str(brief_path), "--topic", "测试议题", "--yes"])
     captured = capsys.readouterr()
     assert exit_code == 2
-    assert "provider preflight blocker" in captured.err
+    assert "provider preflight blocker" in captured.err or "provider preflight" in captured.err

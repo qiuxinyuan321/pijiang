@@ -1,0 +1,67 @@
+{
+  "_comment": "全本地 Ollama 配置：无需外部 API，适合离线/隐私敏感场景。需提前 ollama pull 对应模型。",
+  "version": "v7",
+  "host_mode": "standalone",
+  "provider_profiles": [
+    {
+      "id": "controller-local",
+      "adapter_type": "ollama",
+      "model": "qwen2.5:72b",
+      "roles": ["controller"],
+      "base_url": "http://127.0.0.1:11434",
+      "priority": 10,
+      "enabled": true,
+      "config_status": "needs_setup",
+      "quality_tier": "strong",
+      "notes": "主控位。建议使用 70B+ 模型保证调度质量。"
+    },
+    {
+      "id": "marshal-llama",
+      "adapter_type": "ollama",
+      "model": "llama3.3:70b",
+      "roles": ["marshal"],
+      "base_url": "http://127.0.0.1:11434",
+      "priority": 60,
+      "enabled": true,
+      "config_status": "needs_setup",
+      "quality_tier": "strong",
+      "notes": "裨将位 1：Llama 3.3。"
+    },
+    {
+      "id": "marshal-mistral",
+      "adapter_type": "ollama",
+      "model": "mistral-large:123b",
+      "roles": ["marshal"],
+      "base_url": "http://127.0.0.1:11434",
+      "priority": 70,
+      "enabled": true,
+      "config_status": "needs_setup",
+      "quality_tier": "strong",
+      "notes": "裨将位 2：Mistral Large。"
+    },
+    {
+      "id": "chaos-local",
+      "adapter_type": "ollama",
+      "model": "gemma3:27b",
+      "roles": ["chaos"],
+      "base_url": "http://127.0.0.1:11434",
+      "priority": 90,
+      "enabled": true,
+      "config_status": "needs_setup",
+      "quality_tier": "standard",
+      "notes": "混沌位：小模型也能有效扮演破局角色。"
+    },
+    {
+      "id": "fusion-local",
+      "adapter_type": "ollama",
+      "model": "qwen2.5:72b",
+      "roles": ["fusion"],
+      "base_url": "http://127.0.0.1:11434",
+      "priority": 100,
+      "enabled": true,
+      "config_status": "needs_setup",
+      "quality_tier": "strong",
+      "notes": "融合位：建议与主控使用同一强模型。"
+    }
+  ]
+}

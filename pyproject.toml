@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pijiang"
-version = "0.2.0"
+dynamic = ["version"]
 description = "皮匠：一个面向复杂议题的多模型、多职责议会系统。"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,7 @@ license = "MIT"
 authors = [
   { name = "qiuxinyuan321" }
 ]
-dependencies = []
+dependencies = ["rich>=13.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
@@ -20,6 +20,9 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 cpj = "pijiang.cli.main:main"
 pijiang-factory = "pijiang.cli.main:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "pijiang.__version__"}
 
 [tool.setuptools]
 include-package-data = false

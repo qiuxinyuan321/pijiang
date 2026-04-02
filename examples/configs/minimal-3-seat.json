@@ -1,0 +1,43 @@
+{
+  "_comment": "最小 3 席配置：controller + 1 marshal + fusion。适合快速验证和资源受限环境。",
+  "version": "v7",
+  "host_mode": "standalone",
+  "provider_profiles": [
+    {
+      "id": "controller-primary",
+      "adapter_type": "openai_compatible",
+      "model": "gpt-4o",
+      "roles": ["controller"],
+      "relay_url": "https://your-relay.example.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "priority": 10,
+      "enabled": true,
+      "config_status": "needs_setup",
+      "quality_tier": "elite"
+    },
+    {
+      "id": "marshal-1",
+      "adapter_type": "openai_compatible",
+      "model": "claude-sonnet-4-20250514",
+      "roles": ["marshal"],
+      "relay_url": "https://your-relay.example.com/v1",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "priority": 60,
+      "enabled": true,
+      "config_status": "needs_setup",
+      "quality_tier": "strong"
+    },
+    {
+      "id": "fusion-primary",
+      "adapter_type": "openai_compatible",
+      "model": "gpt-4o",
+      "roles": ["fusion"],
+      "relay_url": "https://your-relay.example.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "priority": 100,
+      "enabled": true,
+      "config_status": "needs_setup",
+      "quality_tier": "elite"
+    }
+  ]
+}

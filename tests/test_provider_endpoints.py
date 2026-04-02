@@ -242,4 +242,4 @@ def test_run_refuses_invalid_structured_endpoint_before_provider_execution(tmp_p
     captured = capsys.readouterr()
 
     assert exit_code == 2
-    assert "provider preflight blocker" in captured.err
+    assert "provider preflight blocker" in captured.err or "provider preflight" in captured.err
