@@ -8,6 +8,7 @@
   <a href="https://github.com/qiuxinyuan321/pijiang/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/qiuxinyuan321/pijiang/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB">
+  <img alt="v0.2.0" src="https://img.shields.io/badge/version-0.2.0-blue">
   <img alt="Council" src="https://img.shields.io/badge/Council-11%20Seats-8B4A2C">
   <img alt="Demo first" src="https://img.shields.io/badge/Experience-demo--first-C97D42">
   <img alt="Obsidian recommended" src="https://img.shields.io/badge/Obsidian-Recommended-5A4B81">
@@ -15,108 +16,60 @@
 
 > 三个臭裨将，顶个诸葛亮。
 
-`皮匠` 把真实多模型议会做成了一个可嵌入现有入口的能力层。
+**皮匠**把真实多模型议会做成了一个可嵌入现有入口的能力层——不是让一个模型扮演多个角色，而是把多个真实模型组织成可执行的议会工作流：
 
-它不是让一个模型扮演多个角色，而是把多个真实模型位组织成一套可执行的议会工作流，让不同模型分别承担不同分析职责，然后完成：
+```
+发散 → 对抗 → 整合 → 收敛
+```
 
-`发散 -> 对抗 -> 整合 -> 收敛`
+安装包名 `pijiang`，主命令 `cpj`。当前公开主线为 **11 席公开议会**，另有可选守护层**觉者**（不参与 quorum，不改结论，只守运行稳定性）。
 
-对外安装包名是 `pijiang`，主命令是 `cpj`。
+## 导航
 
-当前公开主线已经切到 `11 席公开议会`：`controller / planning / search-1 / search-2 / opencode-kimi / opencode-glm5 / opencode-minimax / opencode-qwen / chaos / skeptic / fusion`。另外存在一个可选的旁路守护层 `觉者`：它代表用户身份盯运行稳定性与外部中断修复，但不参与 quorum，也不改最终方案结论。
+| 你最关心什么 | 入口 |
+| --- | --- |
+| 先跑通一次 | [3 分钟上手](#3-分钟上手) |
+| 完整文档导航 | [docs/index.md](docs/index.md) |
+| 当前 baseline 与觉者能力 | [docs/current-baseline-and-watcher.md](docs/current-baseline-and-watcher.md) |
+| 让别的对话调用真实议会 | [docs/invoke-real-council.md](docs/invoke-real-council.md) |
+| standard11 合同与执行门禁 | [docs/contracts/60-execution-contract.md](docs/contracts/60-execution-contract.md) |
+| 核心理念与演化 | [docs/project-philosophy.md](docs/project-philosophy.md) |
+| 图解与议会结构 | [docs/demo-visuals.md](docs/demo-visuals.md) |
+| 首次可信成功路径 | [docs/first-success-path.md](docs/first-success-path.md) |
+| 支持边界 | [docs/support-matrix.md](docs/support-matrix.md) |
+| 给 AI 代理看 | [docs/for-ai-agents.md](docs/for-ai-agents.md) |
+| 参与贡献 | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ## 核心理念
 
-现在多数 AI 产出，对用户来说仍然像黑盒。你通常只知道结果，却不知道这个结果是怎么来的，也不知道还有哪些路线被错过了。
+单次模型输出存在采样性与视角盲区。`皮匠` 不是多摇几次奖，而是把不同模型放进同一个议会制度：彼此对照、互相攻击、互相借鉴，再融合取舍。
 
-如果把单次模型回答理解成一次“摇奖”，那强模型的优势很多时候只是“奖池更优”。这是用户体验层的比喻，不是说模型能力等于随机；它真正想表达的是，用户仍然很难真正拥有“过程感”和“取舍权”。
-
-`皮匠` 的关键升级，不是只替你多摇几次奖。它把不同模型位放进同一个议会制度里，让它们彼此对照、互相攻击、互相借鉴，再进入融合与取舍。
-
-**皮匠让你不再只能接受一次黑盒摇奖，而是拥有在多次方案对照中选择更优结果的能力。** 这种近乎“开挂”的能力，就是“超越大模型的大模型”的关键。它不是替用户做决定，而是把取舍权真正还给用户。
-
-## 一眼看懂
-
-| 你最关心什么 | 先看哪里 |
-| --- | --- |
-| 我想看完整文档导航 | [docs/index.md](docs/index.md) |
-| 我想先看当前最新真实 baseline 与觉者能力 | [docs/current-baseline-and-watcher.md](docs/current-baseline-and-watcher.md) |
-| 我想让别的对话正确调用真实议会 | [docs/invoke-real-council.md](docs/invoke-real-council.md) |
-| 我想看 standard11 合同和执行门禁 | [docs/contracts/60-execution-contract.md](docs/contracts/60-execution-contract.md) |
-| 我想先理解它的核心理念 | [docs/project-philosophy.md](docs/project-philosophy.md) |
-| 我想看它是怎么一轮轮进化的 | [docs/project-philosophy.md](docs/project-philosophy.md) |
-| 如果我是 AI，我想理解这个项目对 AI 的价值 | [docs/for-ai-agents.md](docs/for-ai-agents.md) |
-| 我想先跑通一次 | [3 分钟上手](#3-分钟上手) |
-| 我想先理解它到底是什么 | [它是什么，不是什么](#它是什么不是什么) |
-| 我想看图解与议会结构 | [docs/demo-visuals.md](docs/demo-visuals.md) |
-| 我想看首次可信成功路径 | [docs/first-success-path.md](docs/first-success-path.md) |
-| 我想看支持边界 | [docs/support-matrix.md](docs/support-matrix.md) |
-| 我想看已回流并验证过的运行时能力 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
-| 我准备参与贡献 | [CONTRIBUTING.md](CONTRIBUTING.md) |
+**皮匠让你不再只能接受一次黑盒摇奖，而是拥有在多版方案对照中选择更优结果的能力。**
 
 ## 它是什么，不是什么
 
-| `皮匠` 是什么 | `皮匠` 不是什么 |
+| 皮匠是 | 皮匠不是 |
 | --- | --- |
-| 一个面向复杂议题的多模型、多职责议会能力层 | 一个模型切换语气来“扮演 10 个人” |
-| 一个可嵌入现有入口的高阶决策能力 | 强迫用户切换到全新重应用 |
-| 一条结构化方案链，而不只是单段回答 | 只在聊天窗口里吐一段看起来完整的答案 |
-| 一个带 `demo -> doctor -> truth audit` 的真实工作流 | 带着半残配置直接硬跑的黑盒脚本 |
+| 面向复杂议题的多模型、多职责议会能力层 | 一个模型切换语气来"扮演 10 个人" |
+| 可嵌入现有入口的高阶决策能力 | 强迫用户切换到全新重应用 |
+| 结构化方案链，不只是单段回答 | 聊天窗口里吐一段看起来完整的答案 |
+| 带 `demo → doctor → truth audit` 的真实工作流 | 带着半残配置直接硬跑的黑盒脚本 |
 
-## 起源实验
-
-`皮匠` 不是先有一个抽象理论，再去找场景套上去。它的灵感来自一个很具体的真实观察：在相同提示词下，`Codex + GPT-5.4` 和 `Claude Code + GPT-5.4` 产出了两版不同方案；而且双方互相借鉴之后，仍然还有 `7` 条可以继续优化的地方。
-
-这说明问题不只是“谁更强”。更核心的是，单次输出本身就有采样性、视角性和盲区。
-
-所以在“打地基”“定方向”这类决策里，用户不能只接受一次黑盒抽样。你需要的不是单次更强回答，而是多版方案、互相借鉴、再做取舍的能力。
-
-## 黄金路径
-
-新用户的官方主线不是“下载后直接 `cpj run`”，而是这条更稳的首次成功路径：
-
-| 步骤 | 命令 | 作用 | 你会看到什么 |
-| --- | --- | --- | --- |
-| 1 | `cpj init` | 生成标准配置与 Obsidian 模板 | 官方 11 席拓扑、`demo-config.json` |
-| 2 | `cpj doctor` | 体检 readiness，而不是带病硬跑 | `ready / warning / blocker` |
-| 3 | `cpj demo` | 零 API 验证系统价值 | 完整产物链与可视化结构 |
-| 4 | `cpj run` | 在 provider 准备好后进入真实运行 | 多模型议会输出、truth audit、regression cases |
-
-如果你只记一句话，记这句：
-
-> **先看到价值，再接真实 provider；先过 doctor，再进 real run。**
-
-## 11 席公开议会，只在首页保留总览
-
-首页先讲清职责分工，不把细节一次性全部展开。
+## 11 席议会总览
 
 | 职责层 | 席位 | 作用 |
 | --- | --- | --- |
-| 主控层 | `controller` | 总体调度、收敛策略、降级决策 |
-| 规划层 | `planning` | 结构化规划与 variant 补强 |
-| 搜索层 | `search-1 / search-2` | 外部资料、案例与实现证据 |
-| 四裨将 | `opencode-kimi / opencode-glm5 / opencode-minimax / opencode-qwen` | 创意发散、契约治理、产品表达、多轮辩论与终版成文 |
-| 对抗层 | `chaos / skeptic` | 打破局部最优、红队拆解与失败模式攻击 |
-| 融合层 | `fusion` | 决策账本、最终合并与终版输出 |
+| 主控 | `controller` | 总体调度、收敛策略、降级决策 |
+| 规划 | `planning` | 结构化规划与 variant 补强 |
+| 搜索 | `search-1` / `search-2` | 外部资料、案例与实现证据 |
+| 四裨将 | `opencode-kimi` / `glm5` / `minimax` / `qwen` | 创意发散、契约治理、产品表达、多轮辩论 |
+| 对抗 | `chaos` / `skeptic` | 打破局部最优、红队拆解与失败模式 |
+| 融合 | `fusion` | 决策账本、最终合并与终版输出 |
 
-完整图解和更细的说明放在 [docs/demo-visuals.md](docs/demo-visuals.md)。
-
-需要额外说明的是：`觉者` 不是第 11 个投票席位。它是可选守护层，负责观察整条任务执行链，在卡顿、中断、悬挂或假 running 时代表用户给出建议与有限修复留痕。
-
-这里需要明确三个不同概念：
-
-- `display default`
-  - 当前首页默认展示 `standard11`
-  - 目的是保持统一演示面与文档一致性
-- `evaluation profile`
-  - 当前内部评估 taxonomy 固定比较 `single / reduced6 / standard11`
-  - 用来回答 11 席值不值，不直接等于“所有任务最优”
-- `recommended config`
-  - `standard11` 是唯一公开 canonical/default profile
-  - 当前 README 仍不把它写成“所有任务默认最优”
+> `觉者` 不是第 11 个投票席位，而是可选守护层——在卡顿、中断、假 running 时代表用户给出修复建议。
 
 <details>
-<summary>展开 11 席完整说明</summary>
+<summary>展开 11 席完整职责说明</summary>
 
 | 席位 | 职责 |
 | --- | --- |
@@ -134,160 +87,115 @@
 
 </details>
 
-## 已验证的可信信号
+## 产物链
 
-首页不做花哨看板，只放已经存在、而且仓库内有承接文档的事实型信号。
+`cpj demo` 和 `cpj run` 不只给你一段最终文本，而是一条完整的方案链：
 
-| 信号 | 当前状态 | 去哪里看 |
-| --- | --- | --- |
-| `cpj init / doctor / demo / run` 主链路 | 已固化 | [docs/first-success-path.md](docs/first-success-path.md) |
-| `standard11` seat/profile 合同 | 已落地到源码与治理文档 | [docs/contracts/60-execution-contract.md](docs/contracts/60-execution-contract.md) |
-| `single / reduced6 / standard11` benchmark taxonomy | 已落地，formal baseline 仍以 truth audit 结果为准 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
-| run 后 `truth audit` | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
-| `regression cases` 留痕 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
-| 幽灵堵车隔离并行 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
-| `觉者` 运行守护层 | 已回流 | [docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md) |
-| provider preflight 与支持边界 | 已整理 | [docs/support-matrix.md](docs/support-matrix.md) |
-
-这部分故意只写“已经证实的东西”。下面这些能力仍然保留，但**不会**在首页宣称已经完整生效：
-
-- `soft_budget`
-- `hard_budget`
-- `circuit_breaker_threshold`
-- `quality_retry_threshold`
-- fallback replacement
-- 本地议会的字节级 subprocess streaming
-
-## 你最终拿到的不是一句答案，而是一条产物链
-
-`cpj demo` 和 `cpj run` 的价值，在于它们都不会只给你一段最终文本。
-
-```text
-brief
--> 10 路 variants
--> 第 11 席 fusion
--> idea-map
--> debate-round-1
--> debate-round-2
--> fusion-decisions
--> final-solution-draft
--> Obsidian / CLI 输出
+```
+brief → 10 路 variants → fusion → idea-map → debate×2 → fusion-decisions → final-draft → Obsidian/CLI 输出
 ```
 
-这条链路的意义是：
-
-- 你能回看不同席位的思路来源
-- 你能看到对抗和融合，而不是“答案突然出现”
-- 你能把输出当作方案草案，而不是一次性聊天记录
+- 回看不同席位的思路来源
+- 看到对抗和融合过程，而不是"答案突然出现"
+- 输出是方案草案，不是一次性聊天记录
 
 ## 安装
 
-README 只保留最稳、最短的安装路径。更细的发布策略见 [docs/release-policy.md](docs/release-policy.md)。
-
 | 场景 | 命令 |
 | --- | --- |
-| 从源码目录安装 | `pipx install .` |
-| 从源码目录安装（`uv`） | `uv tool install .` |
-| 从 wheel 安装 | `python -m build` 然后 `python -m pip install dist\\pijiang-0.1.0-py3-none-any.whl` |
-| 未来 PyPI 直装 | `pipx install pijiang` |
+| 从源码安装 | `pipx install .` 或 `uv tool install .` |
+| 从 wheel 安装 | `python -m build && pip install dist/pijiang-0.2.0-py3-none-any.whl` |
+| PyPI 直装（目标） | `pipx install pijiang` |
 
-说明：
-
-- 当前版本：`0.1.0`
-- Python 要求：`3.11+`
-- PyPI 命令属于目标形态；是否已实际发布，请以 release 或 PyPI 页面为准
+> Python 3.11+ · 当前版本 `0.2.0` · PyPI 是否已发布以 release 页面为准
 
 ## 3 分钟上手
 
-### 1. 初始化标准配置与 Obsidian 模板
+### 黄金路径
+
+| 步骤 | 命令 | 作用 | 预期输出 |
+| --- | --- | --- | --- |
+| 1 | `cpj init --yes` | 生成标准配置与 Obsidian 模板 | 11 席拓扑、`demo-config.json` |
+| 2 | `cpj doctor` | 体检 readiness | `ready / warning / blocker` |
+| 3 | `cpj demo` | 零 API 验证系统价值 | 完整产物链与可视化结构 |
+| 4 | `cpj run` | provider 准备好后真实运行 | 多模型议会输出、truth audit |
+
+> **先看到价值，再接真实 provider；先过 doctor，再进 real run。**
+
+### cpj doctor 会告诉你
+
+- 标准/已启用/可运行席位数
+- readiness 等级（`ready / warning / blocker`）
+- 哪些 provider 仍是占位模板
+- 每个 HTTP provider 命中了 `relay_url`、结构化 endpoint 还是 legacy `base_url`
+
+### cpj demo 产物
+
+零 API 调用即可生成完整 11 席产物链：`00-brief.md` → `01-run-overview.md` → `30-idea-map.md` → `40/41-debate.md` → `50-fusion-decisions.md` → `90-final-solution-draft.md`
+
+### cpj run 语义
 
 ```powershell
-cpj init --yes
+cpj run --brief "examples\briefs\project-parliament.md" --topic "议会项目级能力化"
 ```
 
-它会生成：
+- 默认 `parallel_policy = ghost_isolation`：少数慢席位不再拖死整场
+- 达到法定人数即隔离幽灵链路并进入融合
+- 关键席位缺失则拒绝 cutover，不制造伪成功
+- 首次运行会说明工作原理并要求确认
 
-- 一份标准配置
-- 一份 `demo-config.json`
-- 官方 `11` 席议会拓扑
-- 官方 Obsidian Vault 模板
+## 已验证信号
 
-### 2. 先体检，而不是硬跑
-
-```powershell
-cpj doctor
-```
-
-如果你要把结果交给自动化系统判断：
-
-```powershell
-cpj doctor --json
-```
-
-`doctor` 会明确告诉你：
-
-- 标准拓扑席位数
-- 当前已启用席位数
-- 当前可真实运行席位数
-- readiness 是 `ready / warning / blocker`
-- 哪些 provider 仍然只是占位模板
-- 每个 HTTP provider 当前命中了 `relay_url`、结构化 endpoint，还是 legacy `base_url`
-
-### 3. 先跑 demo，看系统价值
-
-```powershell
-cpj demo
-```
-
-`cpj demo` 不会调用真实外部 API，但会完整跑出一条 11 席产物链，并落到 Obsidian 模板目录里。默认会生成：
-
-- `00-brief.md`
-- `01-run-overview.md`
-- `30-idea-map.md`
-- `40-debate-round-1.md`
-- `41-debate-round-2.md`
-- `50-fusion-decisions.md`
-- `90-final-solution-draft.md`
-
-### 4. 再接真实 provider
-
-```powershell
-cpj run --brief "examples\\briefs\\project-parliament.md" --topic "议会项目级能力化"
-```
-
-首次真实运行前，`cpj run` 会固定做三件事：
-
-1. 说明工作原理
-2. 提醒多模型决策会明显更慢
-3. 要求你确认后才真正开始调用
-
-如果 `doctor` 有 blocker，`cpj run` 会直接拒绝执行。
-
-这轮新增的运行语义是：
-
-- 默认 `parallel_policy = ghost_isolation`
-- 对完整议会主线，少数慢席位不再把整场议会拖死
-- 只要达到法定人数，系统就会隔离幽灵链路并进入融合
-- 如果关键席位缺失，则拒绝 cutover，而不是为了快制造伪成功
-
-## 为什么它会继续进化
-
-AI 时代最强的能力之一，不只是更强回答，而是会复盘自己、会升级自己、会用升级后的自己继续讨论自己。
-
-`皮匠` 的进化靠的不是单模型自言自语，而是一整套制度化机制：真实会议、truth audit、regression cases、next-iteration brief、benchmark，以及用升级后的议会继续讨论议会自己。
-
-这就是为什么我们把“自举”“自省”看得很重。对这个项目来说，真正的进化不是换一句提示词，而是让多模型集思广益、互相纠偏之后，把能力一轮轮压进系统。
-
-## Obsidian 是强推荐默认体验
-
-`Obsidian` 不是硬阻断依赖，但它是当前最完整的可视化面板。
-
-- Mermaid 负责讲清关系与流程
-- Vault 负责承接真实 run 产物
-- `demo` 能让新用户在零 API 的情况下先看到系统价值
+| 信号 | 状态 | 文档 |
+| --- | --- | --- |
+| `init / doctor / demo / run` 主链路 | ✅ 已固化 | [first-success-path](docs/first-success-path.md) |
+| `standard11` seat/profile 合同 | ✅ 已落地 | [execution-contract](docs/contracts/60-execution-contract.md) |
+| `single / reduced6 / standard11` benchmark | ✅ 已落地 | [runtime-backflow](docs/runtime-backflow-validation.md) |
+| truth audit · regression cases · 幽灵隔离 | ✅ 已回流 | [runtime-backflow](docs/runtime-backflow-validation.md) |
+| 觉者守护层 | ✅ 已回流 | [runtime-backflow](docs/runtime-backflow-validation.md) |
+| provider preflight 与支持边界 | ✅ 已整理 | [support-matrix](docs/support-matrix.md) |
 
 <details>
-<summary>展开查看默认 Vault 结构</summary>
+<summary>尚未在首页宣称完整生效的能力</summary>
+
+`soft_budget` · `hard_budget` · `circuit_breaker_threshold` · `quality_retry_threshold` · fallback replacement · 本地议会字节级 subprocess streaming
+
+</details>
+
+## 兼容面
+
+**官方首发兼容：** OpenAI-compatible · Ollama · Alibaba Coding Plan · Volcengine Coding Plan
+
+**可选社区适配：** Codex CLI · Claude Code CLI · OpenCode CLI
+
+> `controller` 独立于 `planning`；`coding plan` 是官方一等公民 Planning Provider。详见 [support-matrix](docs/support-matrix.md)。
+
+<details>
+<summary>第三方中转站与自定义端口配置</summary>
+
+provider endpoint 支持三种写法，优先级：`relay_url` > `host+port+path_prefix` > `base_url`
+
+```json
+// relay_url 直连
+{ "relay_url": "https://your-relay.example.com/openai" }
+
+// 结构化
+{ "scheme": "http", "host": "127.0.0.1", "port": 8000, "path_prefix": "/v1" }
+
+// legacy
+{ "base_url": "https://api.openai.com/v1" }
+```
+
+在 `cpj init` 生成的 `config.json` 里编辑 provider endpoint 即可。
+
+</details>
+
+## Obsidian 可视化
+
+Obsidian 不是硬阻断依赖，但它是当前最完整的可视化面板——Mermaid 讲关系流程，Vault 承接产物，demo 让新用户零 API 看到系统价值。
+
+<details>
+<summary>展开 Vault 结构</summary>
 
 ```text
 obsidian-vault/
@@ -301,22 +209,9 @@ obsidian-vault/
    └─ <topic>/
       └─ 方案工厂/
          └─ <run-id>/
-            ├─ 00-brief.md
-            ├─ 01-run-overview.md
-            ├─ 10-controller.md
-            ├─ 11-planning.md
-            ├─ 12-search-1.md
-            ├─ 13-search-2.md
-            ├─ 14-opencode-kimi.md
-            ├─ 15-opencode-glm5.md
-            ├─ 16-opencode-minimax.md
-            ├─ 17-opencode-qwen.md
-            ├─ 18-chaos.md
-            ├─ 19-skeptic.md
-            ├─ 20-fusion.md
+            ├─ 00-brief.md … 20-fusion.md
             ├─ 30-idea-map.md
-            ├─ 40-debate-round-1.md
-            ├─ 41-debate-round-2.md
+            ├─ 40/41-debate.md
             ├─ 50-fusion-decisions.md
             ├─ 70-run-truth-audit.json
             ├─ 80-regression-cases-index.md
@@ -326,164 +221,54 @@ obsidian-vault/
 
 </details>
 
-## 第三方中转站与自定义端口
+## 进化引擎
 
-这一层只是扩展 HTTP 接入兼容面，不会改变 `皮匠` 的议会机制。
-
-- 它支持的是 provider endpoint 的兼容升级
-- 不是把多模型议会退化成单模型角色扮演
-- `cpj run` 仍然必须先通过 readiness gate
-
-你可以在 `cpj init` 生成的 `config.json` 里直接编辑 provider 的 endpoint 字段。
+皮匠的进化不靠单模型自言自语，而是一整套制度化机制：真实会议 → truth audit → regression cases → next-iteration brief → benchmark → 用升级后的议会继续讨论议会自己。
 
 <details>
-<summary>展开 relay / 自定义端口配置示例</summary>
+<summary>展开项目演化样本</summary>
 
-### 旧写法：直接使用 `base_url`
-
-```json
-{
-  "id": "controller-primary",
-  "adapter_type": "openai_compatible",
-  "base_url": "https://api.openai.com/v1"
-}
-```
-
-### 结构化写法：`host + port + path_prefix`
-
-```json
-{
-  "id": "controller-primary",
-  "adapter_type": "openai_compatible",
-  "scheme": "http",
-  "host": "127.0.0.1",
-  "port": 8000,
-  "path_prefix": "/v1"
-}
-```
-
-### 中转站直连：`relay_url`
-
-```json
-{
-  "id": "controller-primary",
-  "adapter_type": "openai_compatible",
-  "relay_url": "https://your-relay.example.com/openai"
-}
-```
-
-优先级固定为：
-
-1. `relay_url`
-2. `host + port + path_prefix`
-3. `base_url`
+| 样本 | 阶段 | 说明 |
+| --- | --- | --- |
+| `皮匠-GitHub-首页美化升级-20260319` | 展示面收敛 | 首页叙事经过真实会议收敛后落地 |
+| `iter-20260319-130615` | 自举协议固化 | `meta-brief → truth audit → delta-report → next-iteration-brief` 循环 |
+| `sf-20260319-151806-111592` | 自省二次验证 | 升级后的议会讨论议会自身 |
+| `sf-20260319-192359-41528` | 并行语义议题化 | "幽灵堵车"正式翻译成并行执行语义 |
 
 </details>
 
-## 兼容面
+## 路线图
 
-官方首发兼容：
+- **Phase A+**（当前）：首次可信成功路径 `init → doctor → demo → run`
+- **Phase B**：Obsidian 单宿主闭环
+- **Phase C**：通用宿主 contract 与能力化抽象
 
-- `OpenAI-compatible`
-- `Ollama`
-- `Alibaba Coding Plan`
-- `Volcengine Coding Plan`
-
-可选社区适配：
-
-- `Codex CLI`
-- `Claude Code CLI`
-- `OpenCode CLI`
-
-其中：
-
-- `controller` 独立于 `planning`
-- `coding plan` 是官方一等公民 Planning Provider
-- 系统建议把强模型放在 controller 位，但不强制
-
-更细的支持分层见 [docs/support-matrix.md](docs/support-matrix.md)。
-
-## 当前项目状态
-
-当前更接近 `v0.x` 阶段，重点在：
-
-- 把 `cpj init / doctor / demo / run` 做成稳定主线
-- 让陌生用户下载后先看到价值，再接真实 provider
-- 把 runtime 回流能力、truth audit、reason codes 和 regression cases 稳定下来
-- 把 GitHub 首页从“长文档”重构成“产品首页 + 文档路由器”
-
-## 项目演化样本
-
-这不是一个“设计好就不变”的仓库。下面这些都是真实发生过的阶段样本，它们说明 `皮匠` 的能力是在议会制度里一轮轮进化出来的：
-
-| 样本 | 属于哪一阶段 | 它说明了什么 |
-| --- | --- | --- |
-| `皮匠-GitHub-首页美化升级-20260319` | 展示面收敛 | 首页叙事和主视觉不是拍脑袋改，而是经过真实会议收敛后再落地 |
-| `iter-20260319-130615` | 自举协议固化 | 已形成 `meta-brief -> truth audit -> delta-report -> next-iteration-brief` 的自举循环 |
-| `sf-20260319-151806-111592` | 自省后的二次验证 | 升级后的议会继续讨论议会自身，主退化被收束到 `schema_failure` |
-| `sf-20260319-192359-41528` | 并行语义议题化 | “幽灵堵车”被正式翻译成并行执行语义议题，而不是停留在比喻 |
-
-这些样本真正说明的是：议会制度不是装饰，它本身就是这个项目的进化引擎。
-
-## 当前官方主线
-
-当前官方主线已经收敛成一条黄金路径：
-
-- `cpj init -> cpj doctor -> cpj demo -> cpj run`
-- `Phase A+` 先只做“首次可信成功路径”
-- `Phase B` 再做 Obsidian 单宿主闭环
-- `Phase C` 才进入更通用的宿主 contract 与能力化抽象
-
-如果你只想先做对一次，先看：
-
-- [docs/first-success-path.md](docs/first-success-path.md)
-- [docs/support-matrix.md](docs/support-matrix.md)
-- [docs/release-policy.md](docs/release-policy.md)
-
-当前 issue backlog 入口：
-
-- [GitHub Issues](https://github.com/qiuxinyuan321/pijiang/issues)
-
-## 当前明确不做什么
-
-这些方向不是否定，而是当前不抢主线：
-
-- 不把多宿主深集成提前到 `Phase A+`
-- 不在官方主路径未稳定前同时铺太多发布渠道
-- 不在支持矩阵尚未冻结前对更多 provider 做深度承诺
-- 不把“demo 路径”和“真实 run 路径”做成两套不同契约
-- 不把项目重新拉回“单模型扮演多个角色”的叙事
-
-## 路线图与文档入口
-
-- 文档导航：[docs/index.md](docs/index.md)
-- 核心理念与演化：[docs/project-philosophy.md](docs/project-philosophy.md)
-- 给 AI 代理的说明：[docs/for-ai-agents.md](docs/for-ai-agents.md)
-- 路线图：[docs/ROADMAP.md](docs/ROADMAP.md)
-- 支持矩阵：[docs/support-matrix.md](docs/support-matrix.md)
-- 发布策略：[docs/release-policy.md](docs/release-policy.md)
-- 图解说明：[docs/demo-visuals.md](docs/demo-visuals.md)
-- 首次成功路径：[docs/first-success-path.md](docs/first-success-path.md)
-- 运行回流验证：[docs/runtime-backflow-validation.md](docs/runtime-backflow-validation.md)
-- 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
-- 安全策略：[SECURITY.md](SECURITY.md)
+当前明确不做：多宿主深集成提前、未稳定前铺发布渠道、支持矩阵未冻结前深度 provider 承诺、demo/run 两套契约、退回单模型角色扮演叙事。
 
 ## 仓库结构
 
-- `pijiang/`: 正式发布主包
-- `tests/`: CLI、provider endpoint、路径与回归测试
-- `docs/`: 公开文档
-- `examples/`: 示例 brief
-- `tools/solution_factory/`: 仓库内 shipped 的真实议会入口与本地 baseline runner
+```
+pijiang/          正式发布主包
+tests/            CLI、provider、路径与回归测试
+docs/             公开文档
+examples/         示例 brief
+tools/            真实议会入口与本地 baseline runner
+```
 
-## 当前命令面
+## 命令面
 
-- `cpj init`
-- `cpj doctor`
-- `cpj demo`
-- `cpj integrate <host>`
-- `cpj run`
+| 命令 | 作用 |
+| --- | --- |
+| `cpj init` | 初始化配置与模板 |
+| `cpj doctor` | 体检 readiness |
+| `cpj demo` | 零 API 演示 |
+| `cpj integrate <host>` | 宿主集成 |
+| `cpj run` | 真实议会运行 |
+
+## 文档入口
+
+[文档导航](docs/index.md) · [核心理念](docs/project-philosophy.md) · [路线图](docs/ROADMAP.md) · [支持矩阵](docs/support-matrix.md) · [发布策略](docs/release-policy.md) · [图解](docs/demo-visuals.md) · [首次成功路径](docs/first-success-path.md) · [运行回流验证](docs/runtime-backflow-validation.md) · [贡献指南](CONTRIBUTING.md) · [安全策略](SECURITY.md) · [给 AI 代理](docs/for-ai-agents.md)
 
 ## License
 
-本项目采用 `MIT` License，详见 [LICENSE](LICENSE)。
+[MIT](LICENSE)
