@@ -5,7 +5,6 @@ from urllib.parse import urlsplit
 
 from .types import EndpointDiagnostic, ProviderProfile
 
-
 HTTP_ADAPTER_TYPES = {"openai_compatible", "planning_api", "ollama"}
 VALID_SCHEMES = {"http", "https"}
 

@@ -8,6 +8,30 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    name: ruff + mypy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[dev]
+
+      - name: Run ruff
+        run: python -m ruff check pijiang tools tests
+
+      - name: Run mypy
+        run: python -m mypy pijiang
+
   test:
     name: pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest

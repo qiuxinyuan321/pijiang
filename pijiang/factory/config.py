@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .registry import LEGACY_STANDARD10_PROFILE, OPENCODE_MARSHAL_SEAT_IDS, STANDARD11_PROFILE
 from .types import (
     ControllerPolicy,
     CouncilSeat,
@@ -17,8 +18,6 @@ from .types import (
     WatcherPolicy,
     WorkflowProfile,
 )
-from .registry import LEGACY_STANDARD10_PROFILE, OPENCODE_MARSHAL_SEAT_IDS, STANDARD11_PROFILE
-
 
 DEFAULT_COUNCIL_VERSION = "v7"
 
@@ -354,18 +353,30 @@ def build_demo_config(
 
 
 def _provider_capabilities_from_dict(payload: dict[str, Any]) -> ProviderCapabilities:
-    return ProviderCapabilities(**payload)
+    allowed = set(ProviderCapabilities.__dataclass_fields__)
+    return ProviderCapabilities(**{key: value for key, value in payload.items() if key in allowed})
 
 
 def _provider_profile_from_dict(payload: dict[str, Any]) -> ProviderProfile:
     capabilities = _provider_capabilities_from_dict(payload.get("capabilities", {}))
     data = dict(payload)
     data["capabilities"] = capabilities
-    return ProviderProfile(**data)
+    if not data.get("base_url") and data.get("relay_url"):
+        data["base_url"] = data["relay_url"]
+    if not data.get("adapter_type"):
+        data["adapter_type"] = "openai_compatible"
+    allowed = set(ProviderProfile.__dataclass_fields__)
+    return ProviderProfile(**{key: value for key, value in data.items() if key in allowed})
 
 
 def _seat_from_dict(payload: dict[str, Any]) -> CouncilSeat:
-    return CouncilSeat(**payload)
+    data = dict(payload)
+    if "id" in data and "seat_id" not in data:
+        data["seat_id"] = data["id"]
+    if "type" in data and "seat_type" not in data:
+        data["seat_type"] = data["type"]
+    allowed = set(CouncilSeat.__dataclass_fields__)
+    return CouncilSeat(**{key: value for key, value in data.items() if key in allowed})
 
 
 def _topology_from_dict(payload: dict[str, Any]) -> CouncilTopology:
@@ -395,16 +406,36 @@ def _execution_policy_from_dict(payload: dict[str, Any] | None) -> ExecutionPoli
 
 
 def _watcher_policy_from_dict(payload: dict[str, Any] | None) -> WatcherPolicy:
-    return WatcherPolicy(**(payload or {}))
+    allowed = set(WatcherPolicy.__dataclass_fields__)
+    return WatcherPolicy(**{key: value for key, value in (payload or {}).items() if key in allowed})
 
 
 def _onboarding_from_dict(payload: dict[str, Any] | None) -> OnboardingState:
-    return OnboardingState(**(payload or {}))
+    allowed = set(OnboardingState.__dataclass_fields__)
+    return OnboardingState(**{key: value for key, value in (payload or {}).items() if key in allowed})
+
+
+def _normalize_legacy_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    data = dict(payload)
+    if "providers" in data and "provider_profiles" not in data:
+        data["provider_profiles"] = data.pop("providers")
+    if "topology" in data and "council_topology" not in data:
+        data["council_topology"] = data.pop("topology")
+    if "obsidian" in data and "visualization" not in data:
+        obsidian = dict(data.pop("obsidian") or {})
+        data["visualization"] = {
+            "obsidian_enabled": bool(obsidian.get("enabled", True)),
+            "vault_path": str(obsidian.get("vault_path", obsidian.get("path", ""))),
+        }
+    for item in data.get("provider_profiles", []) or []:
+        if isinstance(item, dict) and "relay_url" in item and "base_url" not in item:
+            item["base_url"] = item["relay_url"]
+    return data
 
 
 def load_config(path: Path | None = None) -> PijiangConfig:
     config_path = (path or default_config_path()).expanduser().resolve()
-    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload = _normalize_legacy_payload(json.loads(config_path.read_text(encoding="utf-8")))
     return PijiangConfig(
         version=payload.get("version", DEFAULT_COUNCIL_VERSION),
         workspace_root=payload.get("workspace_root", ""),

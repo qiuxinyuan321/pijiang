@@ -4,7 +4,13 @@ import os
 import shutil
 from pathlib import Path
 
-from .config import PijiangConfig, active_seats, build_default_council_topology, find_provider, unique_active_profile_count
+from .config import (
+    PijiangConfig,
+    active_seats,
+    build_default_council_topology,
+    find_provider,
+    unique_active_profile_count,
+)
 from .endpoints import is_http_provider, resolve_provider_base_url
 from .providers import _resolve_opencode_command
 from .types import EndpointDiagnostic, ProviderProfile, ReadinessIssue, ReadinessReport

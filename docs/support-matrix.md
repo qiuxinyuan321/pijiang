@@ -18,7 +18,7 @@
 当前官方主线固定为：
 
 - Windows-first
-- `cpj init -> cpj doctor -> cpj demo -> cpj run`
+- `cpj init -> cpj doctor -> cpj demo -> cpj config add-provider -> cpj doctor --fix -> cpj run -> cpj runs / cpj show`
 - Obsidian 作为强推荐默认可视化层
 - 单一路径发布基线优先
 

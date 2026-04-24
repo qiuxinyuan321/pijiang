@@ -1,3 +1,5 @@
+from pijiang.factory.runtime_support import normalize_variant_markdown
+
 from .core import (
     DEFAULT_LANES,
     PreparedCommand,
@@ -7,7 +9,6 @@ from .core import (
     main,
     parse_opencode_event_stream,
 )
-from pijiang.factory.runtime_support import normalize_variant_markdown
 
 __all__ = [
     "DEFAULT_LANES",

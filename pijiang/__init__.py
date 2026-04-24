@@ -1,4 +1,4 @@
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .factory.config import (
     DEFAULT_COUNCIL_VERSION,
@@ -9,9 +9,9 @@ from .factory.config import (
 )
 
 __all__ = [
-    "__version__",
     "DEFAULT_COUNCIL_VERSION",
     "PijiangConfig",
+    "__version__",
     "default_config_path",
     "load_config",
     "save_config",

@@ -9,10 +9,18 @@ from itertools import combinations
 from pathlib import Path
 from typing import Any
 
-from .runtime_support import CANONICAL_SECTIONS, utc_now_iso, write_json, write_text
 from .registry import LEGACY_STANDARD10_PROFILE, OPENCODE_MARSHAL_SEAT_IDS, STANDARD11_PROFILE
-from .types import BenchmarkMeasurement, BenchmarkReport, EvidenceRef, QualityAssessment, RegressionCase, RunTruthAudit, SearchArtifact, SeatResult
-
+from .runtime_support import CANONICAL_SECTIONS, utc_now_iso, write_json, write_text
+from .types import (
+    BenchmarkMeasurement,
+    BenchmarkReport,
+    EvidenceRef,
+    QualityAssessment,
+    RegressionCase,
+    RunTruthAudit,
+    SearchArtifact,
+    SeatResult,
+)
 
 SEARCH_SEAT_IDS = {"search-1", "search-2", "codex-github-cases", "codex-web-research"}
 POLLUTION_MARKERS = (
@@ -359,7 +367,7 @@ def _build_regression_case(
     repair_hypothesis: str,
     verification_command: str,
 ) -> RegressionCase:
-    slug = hashlib.sha1(f"{run_id}:{failure_type}:{'|'.join(offending_outputs)}".encode("utf-8")).hexdigest()[:10]
+    slug = hashlib.sha1(f"{run_id}:{failure_type}:{'|'.join(offending_outputs)}".encode()).hexdigest()[:10]
     return RegressionCase(
         case_id=f"{failure_type}-{slug}",
         source_run_id=run_id,
@@ -458,7 +466,9 @@ def audit_council_run(
     manifest = _read_json(run_dir / "run_manifest.json")
     brief_text = _read_text(Path(manifest["brief_path"]).expanduser().resolve())
     manifest_items = _manifest_items(manifest)
-    expected_seat_count = len(manifest_items)
+    council_items = [item for item in manifest_items if str(item.get("seat_type", "")) != "fusion" and str(item.get("seat_id", "")) != "fusion"]
+    fusion_items = [item for item in manifest_items if str(item.get("seat_type", "")) == "fusion" or str(item.get("seat_id", "")) == "fusion"]
+    expected_seat_count = len(council_items)
     successful_texts: list[str] = []
     cases: list[RegressionCase] = []
     degraded_chain_ids: list[str] = []
@@ -475,6 +485,7 @@ def audit_council_run(
     search_expected = 0
     search_with_evidence = 0
     seat_valid_count = 0
+    fusion_valid_count = 0
 
     for seat_payload in manifest_items:
         seat_id = seat_payload["seat_id"]
@@ -488,6 +499,8 @@ def audit_council_run(
             seat_result = _build_fusion_seat_result(seat_id, markdown_text, quality)
             variant_status = "success" if quality.schema_valid else "missing"
             variant_payload = {"status": variant_status}
+            if quality.schema_valid:
+                fusion_valid_count += 1
         else:
             variant_result_path = seat_dir / "variant_result.json"
             variant_payload = _read_json(variant_result_path) if variant_result_path.exists() else {"status": "missing"}
@@ -512,7 +525,7 @@ def audit_council_run(
         variant_status = str(variant_payload.get("status", "missing"))
         if variant_status == "success":
             successful_texts.append(markdown_text)
-            if quality.schema_valid:
+            if quality.schema_valid and seat_type != "fusion" and seat_id != "fusion":
                 seat_valid_count += 1
             if "polluted_output" in quality.quality_flags:
                 fake_success_flags.append(f"polluted_output:{seat_id}")
@@ -529,7 +542,7 @@ def audit_council_run(
                         verification_command=verification_command,
                     )
                 )
-            if "missing_sections" in quality.quality_flags:
+            if "missing_sections" in quality.quality_flags and seat_type != "fusion" and seat_id != "fusion":
                 degraded_chain_ids.append(seat_id)
                 reason_codes.add("missing_sections")
                 repair_candidates.append(f"{seat_id}: 强化结构化输出，保证 10 个 canonical sections 完整。")
@@ -549,7 +562,11 @@ def audit_council_run(
                 seat_failure_type = "provider_invocation_failure"
             else:
                 seat_failure_type = "schema_failure" if markdown_text else "timeout_partial_only"
-            reason_codes.add(seat_failure_type)
+            if seat_type == "fusion" or seat_id == "fusion":
+                reason_codes.add("missing_fusion_artifacts")
+                seat_failure_type = "missing_fusion_artifacts"
+            else:
+                reason_codes.add(seat_failure_type)
             cases.append(
                 _build_regression_case(
                     failure_type=seat_failure_type,
@@ -583,6 +600,8 @@ def audit_council_run(
         output_dir / "90-final-solution-draft.md",
     ]
     fusion_integrity_score = round(100 * sum(1 for path in fusion_files if path.exists() and _read_text(path).strip()) / len(fusion_files))
+    if fusion_items and fusion_valid_count == 0:
+        fusion_integrity_score = min(fusion_integrity_score, 80)
 
     artifact_files = [
         run_dir / "run_manifest.json",
@@ -646,12 +665,12 @@ def audit_council_run(
     non_terminal_seats = [
         seat_id
         for seat_id, seat_status in status_items.items()
-        if seat_status not in {"success", "failed", "ghost_blocked", "late_result"}
+        if seat_id != "fusion" and seat_status not in {"success", "failed", "ghost_blocked", "late_result"}
     ]
     terminal_seat_count = sum(
         1
-        for seat_status in status_items.values()
-        if seat_status in {"success", "failed", "ghost_blocked", "late_result"}
+        for seat_id, seat_status in status_items.items()
+        if seat_id != "fusion" and seat_status in {"success", "failed", "ghost_blocked", "late_result"}
     )
     if non_terminal_seats or terminal_seat_count != expected_seat_count:
         reason_codes.add("topology_mismatch")

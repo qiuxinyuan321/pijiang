@@ -18,7 +18,7 @@
 
 - 还没安装
 - 刚下载仓库
-- 想先知道 `cpj init -> cpj doctor -> cpj demo -> cpj run` 到底是怎么回事
+- 想先知道 `cpj init -> cpj doctor -> cpj demo -> cpj config add-provider -> cpj doctor --fix -> cpj run -> cpj runs / cpj show` 到底是怎么回事
 
 ## 如果你准备真正跑一次
 

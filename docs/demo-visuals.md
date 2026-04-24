@@ -7,7 +7,7 @@ README 现在更偏“产品首页 + 文档路由器”，因此把更完整的�
 这份文档专门回答三个问题：
 
 1. `11` 席议会到底在表达什么
-2. 为什么推荐 `cpj init -> cpj doctor -> cpj demo -> cpj run`
+2. 为什么推荐 `cpj init -> cpj doctor -> cpj demo -> cpj config add-provider -> cpj doctor --fix -> cpj run -> cpj runs / cpj show`
 3. 为什么 `demo` 不是玩具，而是价值验证路径
 
 ## 图 1：11 席议会拓扑
@@ -44,15 +44,17 @@ flowchart LR
 - `skeptic` 存在的意义是打破自我说服，让系统保留真正的反对意见。
 - `chaos` 不是搞乱流程，而是负责打破局部最优和惯性方案。
 
-## 图 2：新用户最短路径
+## 图 2：新用户最短路径（v0.4）
 
 ```mermaid
 flowchart LR
     A["cpj init"] --> B["cpj doctor"]
     B -->|"readiness 通过"| C["cpj demo"]
     C --> D["看到 11 席与完整产物链"]
-    D --> E["配置真实 providers"]
-    E --> F["cpj run"]
+    D --> E["cpj config add-provider"]
+    E --> G["设 env 变量 + cpj doctor --fix"]
+    G --> F["cpj run"]
+    F --> H["cpj runs / cpj show"]
 ```
 
 ### 看图说明
@@ -60,7 +62,9 @@ flowchart LR
 - `cpj init` 的作用不是让你马上运行，而是先生成标准结构。
 - `cpj doctor` 是门禁，不是附加项。它负责告诉你当前配置是 `ready`、`warning` 还是 `blocker`。
 - `cpj demo` 是零 API 的价值验证路径，先让用户看到系统到底会产出什么。
+- **v0.4 新增**：`cpj config add-provider <preset>` 代替手工编辑 `config.json`；`cpj doctor --fix` 按 env 就绪批量推进为 `configured`。
 - 只有当 provider 配好之后，`cpj run` 才应该承担真实外部调用。
+- `cpj runs` / `cpj show` 构成闭环：每次 run 完后用一眼看刚跑的 audit 结论与产物清单。
 
 ## 图 3：demo 产物链
 

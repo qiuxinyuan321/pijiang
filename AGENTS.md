@@ -25,6 +25,13 @@
 
 这两个入口才代表本仓库的真实议会能力。
 
+v0.4 补充的辅助入口（均不取代上面两个主入口）：
+
+- `cpj runs` —— 列最近 run 和 truth-audit 摘要
+- `cpj show <run-id>` —— 单次 run 的产物清单与 audit 结论
+- `cpj doctor --fix` —— env 就绪的 HTTP provider 自动推进为 `configured`
+- `cpj config add-provider <preset>` —— 从内置 preset 快速追加 provider
+
 ## 默认执行语义
 
 - 默认 profile：`standard11`
@@ -48,9 +55,10 @@
 
 先做这三件事，再决定是否退化：
 
-1. 检查 `cpj doctor`
+1. 检查 `cpj doctor`（或 `cpj doctor --fix` 先自动推进 env 就绪的 provider）
 2. 检查 `tools.solution_factory` / `cpj run` 的 provider 链路
-3. 明确告诉用户当前阻塞点
+3. 用 `cpj runs` 看最近一批 run 的 audit 结论和失败模式
+4. 明确告诉用户当前阻塞点
 
 只有在用户明确接受时，才允许退化成非真实议会的快速审议模式，而且必须直说：
 

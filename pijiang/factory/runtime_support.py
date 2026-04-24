@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 CANONICAL_SECTIONS = [
     "问题定义",
@@ -41,6 +40,7 @@ SECTION_ALIAS_MAP = {
 }
 
 SEARCH_SEAT_IDS = {"search-1", "search-2"}
+OPENCODE_FAMILY = "opencode"
 OUTPUT_POLLUTION_MARKERS = (
     '{"type":"step_start"',
     '{"type":"tool_use"',
@@ -141,7 +141,7 @@ FINAL_DRAFT_SCHEMA: dict[str, Any] = {
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def ensure_directory(path: Path) -> Path:
@@ -284,6 +284,43 @@ def variant_quality_issue(lane: LaneSpec, raw_text: str) -> str:
     return ""
 
 
+def parse_opencode_event_stream(stdout_text: str) -> str:
+    text_parts: list[str] = []
+    for raw_line in stdout_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        part = payload.get("part", {})
+        if payload.get("type") == "text" and isinstance(part, dict):
+            text = str(part.get("text", "")).strip()
+            if text:
+                text_parts.append(text)
+    return "\n\n".join(text_parts).strip()
+
+
+def build_retry_variant_prompt(
+    *,
+    base_prompt: str,
+    lane: LaneSpec,
+    error_summary: str,
+) -> str:
+    return (
+        f"{base_prompt.rstrip()}\n\n"
+        "上一次输出未通过质量门，请你只做纠错，不要换题，也不要输出解释。\n"
+        f"失败原因：{error_summary.strip()}\n"
+        "纠错要求：\n"
+        "1. 直接输出最终 Markdown 正文，不要输出代码块。\n"
+        "2. 必须严格使用 10 个指定一级标题。\n"
+        "3. 不允许输出占位标题、教程示例或过程旁白。\n"
+        "4. 若某节不确定，也必须给出你的当前判断，不能留空。\n"
+        f"请立即重写 `{lane.id}` 的最终可用输出。\n"
+    )
+
+
 def frontmatter_block(payload: dict[str, Any]) -> str:
     lines = ["---"]
     for key, value in payload.items():
@@ -330,6 +367,78 @@ def render_brief_markdown(brief_text: str, *, run_id: str, created_at: str) -> s
         }
     )
     return f"{frontmatter}\n\n{brief_text.strip()}\n"
+
+
+def render_failed_variant_markdown(
+    *,
+    lane: LaneSpec,
+    run_id: str,
+    created_at: str,
+    error_summary: str,
+) -> str:
+    frontmatter = frontmatter_block(
+        {
+            "sf_run_id": run_id,
+            "sf_stage": "variant",
+            "sf_lane": lane.id,
+            "sf_source_cli": lane.source_cli,
+            "sf_model": lane.model,
+            "sf_created_at": created_at,
+        }
+    )
+    return (
+        f"{frontmatter}\n\n"
+        "# 执行失败\n"
+        f"> lane `{lane.id}` 执行失败，未生成标准方案正文。\n\n"
+        "## 错误摘要\n"
+        f"{error_summary.strip() or '未知错误'}\n"
+    )
+
+
+def render_preflight_markdown(
+    payload: dict[str, Any],
+    *,
+    run_id: str,
+    created_at: str,
+) -> str:
+    frontmatter = frontmatter_block(
+        {
+            "sf_run_id": run_id,
+            "sf_stage": "preflight",
+            "sf_lane": "preflight",
+            "sf_source_cli": "local",
+            "sf_model": "n/a",
+            "sf_created_at": created_at,
+        }
+    )
+    lines = [
+        frontmatter,
+        "",
+        "# 运行前检查",
+        "",
+        f"- 请求 profile：`{payload.get('requested_lane_profile', '')}`",
+        f"- 实际 profile：`{payload.get('effective_lane_profile', '')}`",
+        "",
+    ]
+    issues = payload.get("issues", [])
+    if issues:
+        lines.append("## 发现的问题")
+        for issue in issues:
+            lines.append(f"- `{issue.get('code', 'unknown')}`：{issue.get('message', '').strip()}")
+        lines.append("")
+    unavailable_lane_ids = payload.get("unavailable_lane_ids", [])
+    if unavailable_lane_ids:
+        lines.append("## 当前不可用 lane")
+        for lane_id in unavailable_lane_ids:
+            lines.append(f"- `{lane_id}`")
+        lines.append("")
+    availability = payload.get("family_availability", {})
+    if availability:
+        lines.append("## Family 可用性")
+        for family, item in availability.items():
+            lines.append(f"- `{family}`：`{item.get('status', 'unknown')}` / `{item.get('detail', '')}`")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_stage_markdown(
@@ -494,6 +603,7 @@ def build_variant_prompt(brief_text: str, lane: LaneSpec) -> str:
     section_template = "\n".join(f"# {name}" for name in CANONICAL_SECTIONS)
     special_block = f"额外要求：\n{lane.special_instructions.strip()}\n\n" if lane.special_instructions.strip() else ""
     search_hardening_block = ""
+    opencode_hardening_block = ""
     if lane.id in SEARCH_SEAT_IDS:
         search_hardening_block = (
             "搜索位硬约束：\n"
@@ -501,6 +611,14 @@ def build_variant_prompt(brief_text: str, lane: LaneSpec) -> str:
             "2. 至少保留 5 条外部证据，优先使用完整 URL 或 GitHub 仓库链接。\n"
             "3. 对每条关键外部观察，说明：借鉴点 / 不借鉴点 / 适用原因。\n"
             "4. 如果检索失败或证据不足，必须明确写出缺口，不允许假装已经完成搜索。\n\n"
+        )
+    if lane.family == OPENCODE_FAMILY:
+        opencode_hardening_block = (
+            "opencode 系产线硬约束：\n"
+            "1. 禁止输出 `Heading 1`、`Heading 2` 之类占位标题。\n"
+            "2. 禁止输出 Markdown 教学示例、模板示例或 ```markdown 代码块。\n"
+            "3. 必须直接从 `# 问题定义` 开始，严格给出 10 个一级中文标题。\n"
+            "4. 任何一节都不能留空；即使不确定，也要写出当前判断与风险。\n\n"
         )
     return (
         f"{stage_marker_block('variant', lane.id)}\n"
@@ -513,6 +631,7 @@ def build_variant_prompt(brief_text: str, lane: LaneSpec) -> str:
         "2. 观点要便于后续多轮融合。\n"
         "3. 每个章节都给出实质内容。\n\n"
         f"{search_hardening_block}"
+        f"{opencode_hardening_block}"
         f"{special_block}"
         f"Brief:\n{brief_text.strip()}\n"
     )

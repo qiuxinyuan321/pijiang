@@ -12,7 +12,7 @@ if str(REPO_ROOT) not in sys.path:
 
 import pijiang.factory.analysis as factory_analysis
 from pijiang.factory.analysis import build_benchmark_report, load_truth_audit
-from pijiang.factory.config import build_default_config, find_provider, save_config
+from pijiang.factory.config import build_default_config
 from pijiang.factory.council import CouncilEngine
 from pijiang.factory.watcher import recover_abandoned_runs
 

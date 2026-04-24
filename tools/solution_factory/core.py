@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import concurrent.futures
@@ -12,7 +12,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,27 +27,35 @@ from pijiang.factory.admission import (
     render_baseline_admission_markdown,
     render_topology_report_markdown,
 )
-from pijiang.factory.registry import LEGACY_PROFILE_ALIASES, LEGACY_STANDARD10_PROFILE, SEAT_REGISTRY_VERSION, STANDARD11_PROFILE
+from pijiang.factory.registry import (
+    LEGACY_PROFILE_ALIASES,
+    LEGACY_STANDARD10_PROFILE,
+    SEAT_REGISTRY_VERSION,
+    STANDARD11_PROFILE,
+)
 from pijiang.factory.runtime_support import (
-    CANONICAL_SECTIONS,
     FINAL_DECISIONS_SCHEMA,
     FINAL_DRAFT_SCHEMA,
-    SECTION_ALIASES,
-    SECTION_ALIAS_MAP,
     LaneResult,
     LaneSpec,
+    build_debate_round_prompt,
+    build_final_decisions_prompt,
+    build_final_draft_prompt,
+    build_idea_map_prompt,
+    build_retry_variant_prompt,
+    build_variant_prompt,
     ensure_directory,
-    frontmatter_block,
-    normalize_heading,
     normalize_variant_markdown,
+    parse_opencode_event_stream,
     parse_variant_sections,
     render_brief_markdown,
     render_decisions_markdown,
+    render_failed_variant_markdown,
     render_final_draft_markdown,
     render_index_markdown,
+    render_preflight_markdown,
     render_stage_markdown,
     split_project_path,
-    stage_marker_block,
     trim_to_canonical_markdown,
     utc_now_iso,
     variant_quality_issue,
@@ -57,7 +65,6 @@ from pijiang.factory.runtime_support import (
 from pijiang.factory.types import WatcherPolicy
 from pijiang.factory.watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, watcher_enabled
 from tools.workspace_paths import REPO_ROOT, get_workspace_drive_root, get_workspace_name, get_workspace_root
-
 
 DEFAULT_CODEX_MODEL = "gpt-5.4"
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-6"
@@ -571,225 +578,7 @@ def build_claude_fusion_command(
     return PreparedCommand(command=command, cwd=workspace_root, stdin_text=prompt_text)
 
 
-def parse_opencode_event_stream(stdout_text: str) -> str:
-    text_parts: list[str] = []
-    for raw_line in stdout_text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        part = payload.get("part", {})
-        if payload.get("type") == "text" and isinstance(part, dict):
-            text = str(part.get("text", "")).strip()
-            if text:
-                text_parts.append(text)
-    return "\n\n".join(text_parts).strip()
-
-
-def build_retry_variant_prompt(
-    *,
-    base_prompt: str,
-    lane: LaneSpec,
-    error_summary: str,
-) -> str:
-    return (
-        f"{base_prompt.rstrip()}\n\n"
-        "上一次输出未通过质量门，请你只做纠错，不要换题，也不要输出解释。\n"
-        f"失败原因：{error_summary.strip()}\n"
-        "纠错要求：\n"
-        "1. 直接输出最终 Markdown 正文，不要输出代码块。\n"
-        "2. 必须严格使用 10 个指定一级标题。\n"
-        "3. 不允许输出占位标题、教程示例或过程旁白。\n"
-        "4. 若某节不确定，也必须给出你的当前判断，不能留空。\n"
-        f"请立即重写 `{lane.id}` 的最终可用输出。\n"
-    )
-
-
-# parse_variant_sections — now imported from pijiang.factory.runtime_support
-
-
-
-# frontmatter_block — now imported from pijiang.factory.runtime_support
-
-# normalize_variant_markdown — now imported from pijiang.factory.runtime_support
-
-
-def render_failed_variant_markdown(
-    *,
-    lane: LaneSpec,
-    run_id: str,
-    created_at: str,
-    error_summary: str,
-) -> str:
-    frontmatter = frontmatter_block(
-        {
-            "sf_run_id": run_id,
-            "sf_stage": "variant",
-            "sf_lane": lane.id,
-            "sf_source_cli": lane.source_cli,
-            "sf_model": lane.model,
-            "sf_created_at": created_at,
-        }
-    )
-    return (
-        f"{frontmatter}\n\n"
-        "# 执行失败\n"
-        f"> lane `{lane.id}` 执行失败，未生成标准方案正文。\n\n"
-        "## 错误摘要\n"
-        f"{error_summary.strip() or '未知错误'}\n"
-    )
-
-
-
-# render_brief_markdown — now imported from pijiang.factory.runtime_support
-
-
-def render_preflight_markdown(
-    payload: dict[str, Any],
-    *,
-    run_id: str,
-    created_at: str,
-) -> str:
-    frontmatter = frontmatter_block(
-        {
-            "sf_run_id": run_id,
-            "sf_stage": "preflight",
-            "sf_lane": "preflight",
-            "sf_source_cli": "local",
-            "sf_model": "n/a",
-            "sf_created_at": created_at,
-        }
-    )
-    lines = [
-        frontmatter,
-        "",
-        "# 运行前检查",
-        "",
-        f"- 请求 profile：`{payload.get('requested_lane_profile', '')}`",
-        f"- 实际 profile：`{payload.get('effective_lane_profile', '')}`",
-        "",
-    ]
-    issues = payload.get("issues", [])
-    if issues:
-        lines.append("## 发现的问题")
-        for issue in issues:
-            lines.append(f"- `{issue.get('code', 'unknown')}`：{issue.get('message', '').strip()}")
-        lines.append("")
-    unavailable_lane_ids = payload.get("unavailable_lane_ids", [])
-    if unavailable_lane_ids:
-        lines.append("## 当前不可用 lane")
-        for lane_id in unavailable_lane_ids:
-            lines.append(f"- `{lane_id}`")
-        lines.append("")
-    availability = payload.get("family_availability", {})
-    if availability:
-        lines.append("## Family 可用性")
-        for family, item in availability.items():
-            lines.append(f"- `{family}`：`{item.get('status', 'unknown')}` / `{item.get('detail', '')}`")
-        lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-
-# render_stage_markdown — now imported from pijiang.factory.runtime_support
-
-
-# render_decisions_markdown — now imported from pijiang.factory.runtime_support
-
-
-# render_final_draft_markdown — now imported from pijiang.factory.runtime_support
-
-
-# render_index_markdown — now imported from pijiang.factory.runtime_support
-
-def build_variant_prompt(brief_text: str, lane: LaneSpec) -> str:
-    section_template = "\n".join(f"# {name}" for name in CANONICAL_SECTIONS)
-    special_block = f"额外要求：\n{lane.special_instructions.strip()}\n\n" if lane.special_instructions.strip() else ""
-    opencode_hardening_block = ""
-    if lane.family == "opencode":
-        opencode_hardening_block = (
-            "opencode 系产线硬约束：\n"
-            "1. 禁止输出 `Heading 1`、`Heading 2` 之类占位标题。\n"
-            "2. 禁止输出 Markdown 教学示例、模板示例或 ```markdown 代码块。\n"
-            "3. 必须直接从 `# 问题定义` 开始，严格给出 10 个一级中文标题。\n"
-            "4. 任何一节都不能留空；即使不确定，也要写出当前判断与风险。\n\n"
-        )
-    return (
-        f"{stage_marker_block('variant', lane.id)}\n"
-        f"你是多模型方案工厂中的 `{lane.id}` 产线。\n"
-        f"思考角度：{lane.thinking_angle}\n"
-        "请只输出 Markdown，并严格使用下面这些一级标题，顺序不要改变：\n"
-        f"{section_template}\n\n"
-        "要求：\n"
-        "1. 聚焦项目方案脑暴，不进入写代码阶段。\n"
-        "2. 观点要便于后续多轮融合。\n"
-        "3. 每个章节都给出实质内容。\n\n"
-        f"{opencode_hardening_block}"
-        f"{special_block}"
-        f"Brief:\n{brief_text.strip()}\n"
-    )
-
-
-def build_idea_map_prompt(fusion_context: dict[str, Any]) -> str:
-    return (
-        f"{stage_marker_block('idea-map', 'codex-gpt')}\n"
-        "请根据 fusion_context 输出 Markdown，并且必须包含以下一级标题：\n"
-        "# 共识点\n# 独特亮点\n# 冲突点\n# 质疑焦点\n# 可组合点\n\n"
-        "要求：明确抽取 `codex-skeptic` 的核心质疑，并把它单列到“质疑焦点”，不要把它稀释进普通冲突点。\n\n"
-        f"fusion_context:\n{json.dumps(fusion_context, ensure_ascii=False, indent=2)}\n"
-    )
-
-
-def build_debate_round_prompt(
-    *,
-    round_index: int,
-    fusion_context: dict[str, Any],
-    idea_map_text: str,
-    previous_round_text: str | None = None,
-) -> str:
-    previous = previous_round_text.strip() if previous_round_text else ""
-    previous_block = f"\n上一轮辩论：\n{previous}\n" if previous else ""
-    return (
-        f"{stage_marker_block(f'debate-round-{round_index}', 'codex-gpt')}\n"
-        f"请输出第 {round_index} 轮辩论纪要的 Markdown。\n"
-        "把这轮视为“9 人议会回应 1 路质疑者”的对抗讨论。\n"
-        "每轮都明确：谁提出观点、质疑者如何攻击、谁反驳、反驳依据、被采纳的修正、仍未解决的质疑。\n"
-        f"Idea map:\n{idea_map_text.strip()}\n"
-        f"{previous_block}"
-        f"fusion_context:\n{json.dumps(fusion_context, ensure_ascii=False, indent=2)}\n"
-    )
-
-
-def build_final_decisions_prompt(
-    fusion_context: dict[str, Any],
-    *,
-    idea_map_text: str,
-    debate_round_1_text: str,
-    debate_round_2_text: str,
-) -> str:
-    return (
-        f"{stage_marker_block('final-decisions-json', 'codex-gpt')}\n"
-        "请输出 JSON，形成终版的决策账本。不要输出 Markdown，不要输出代码块。\n"
-        "每条决策都必须包含 topic、decision、sources、reason、skeptic_challenge、skeptic_rebuttal、rejected_options、open_questions。\n"
-        "其中 skeptic_challenge 必须提炼 `codex-skeptic` 或辩论中的主要红队质疑；skeptic_rebuttal 必须写明议会为什么仍坚持该决定，或者如何局部让步后再采用。\n"
-        f"Idea map:\n{idea_map_text.strip()}\n\n"
-        f"Round 1:\n{debate_round_1_text.strip()}\n\n"
-        f"Round 2:\n{debate_round_2_text.strip()}\n\n"
-        f"fusion_context:\n{json.dumps(fusion_context, ensure_ascii=False, indent=2)}\n"
-    )
-
-
-def build_final_draft_prompt(fusion_context: dict[str, Any], *, decisions_payload: dict[str, Any]) -> str:
-    return (
-        f"{stage_marker_block('final-draft-json', 'codex-gpt')}\n"
-        "请输出 JSON，形成终版方案草案。不要输出 Markdown，不要输出代码块。\n"
-        "每个 section 都必须包含 title、content、sources、rationale、status。\n"
-        f"decisions_payload:\n{json.dumps(decisions_payload, ensure_ascii=False, indent=2)}\n\n"
-        f"fusion_context:\n{json.dumps(fusion_context, ensure_ascii=False, indent=2)}\n"
-    )
+# parse/render/prompt helpers are imported from pijiang.factory.runtime_support.
 
 
 class RunTracker:
@@ -1440,11 +1229,13 @@ class SolutionFactory:
             write_text(fusion_dir / f"{stage}.claude.stderr.log", completed.stderr or "")
             if completed.returncode != 0:
                 raise RuntimeError(
-                    f"fusion step {stage} failed: codex={str(exc)} | claude={(completed.stderr or completed.stdout).strip()}"
-                )
+                    f"fusion step {stage} failed: codex={exc!s} | claude={(completed.stderr or completed.stdout).strip()}"
+                ) from exc
             body = (completed.stdout or "").strip()
             if not body:
-                raise RuntimeError(f"fusion step {stage} failed: codex={str(exc)} | claude returned empty content")
+                raise RuntimeError(
+                    f"fusion step {stage} failed: codex={exc!s} | claude returned empty content"
+                ) from exc
         finally:
             heartbeat.stop()
         write_text(
@@ -1525,11 +1316,13 @@ class SolutionFactory:
             write_text(fusion_dir / f"{stage}.claude.stderr.log", completed.stderr or "")
             if completed.returncode != 0:
                 raise RuntimeError(
-                    f"fusion step {stage} failed: codex={str(exc)} | claude={(completed.stderr or completed.stdout).strip()}"
-                )
+                    f"fusion step {stage} failed: codex={exc!s} | claude={(completed.stderr or completed.stdout).strip()}"
+                ) from exc
             raw_payload = (completed.stdout or "").strip()
             if not raw_payload:
-                raise RuntimeError(f"fusion step {stage} failed: codex={str(exc)} | claude returned empty JSON")
+                raise RuntimeError(
+                    f"fusion step {stage} failed: codex={exc!s} | claude returned empty JSON"
+                ) from exc
             payload = json.loads(raw_payload)
             write_text(output_last_message_path, json.dumps(payload, ensure_ascii=False, indent=2))
         finally:
@@ -1890,3 +1683,4 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     return int(args.func(args))
+

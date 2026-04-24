@@ -6,10 +6,11 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .admission import (
     DEFAULT_RUN_GRADE,
@@ -24,7 +25,9 @@ from .admission import (
 )
 from .analysis import audit_council_run
 from .config import PijiangConfig, active_seats, council_mode, find_provider, unique_active_profile_count
+from .providers import ProviderExecutionError, adapter_for_profile, execute_profile_request
 from .readiness import build_readiness_report
+from .registry import OPENCODE_MARSHAL_SEAT_IDS, SEAT_REGISTRY_VERSION, STANDARD11_QUORUM_PROFILE
 from .runtime_support import (
     FINAL_DECISIONS_SCHEMA,
     FINAL_DRAFT_SCHEMA,
@@ -50,11 +53,8 @@ from .runtime_support import (
     write_json,
     write_text,
 )
-from .providers import ProviderExecutionError, adapter_for_profile, execute_profile_request
-from .registry import OPENCODE_MARSHAL_SEAT_IDS, SEAT_REGISTRY_VERSION, STANDARD11_QUORUM_PROFILE
 from .types import CouncilSeat, ExecutionRequest, RunProgressSnapshot
 from .watcher import WatcherMonitor, WatcherRecorder, recover_abandoned_runs, watcher_enabled
-
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +209,7 @@ class _HeartbeatLoop:
     def __init__(
         self,
         *,
-        tracker: "CouncilRunTracker",
+        tracker: CouncilRunTracker,
         stage: str,
         seat_id: str = "",
         provider_profile: str = "",

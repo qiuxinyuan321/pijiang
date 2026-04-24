@@ -5,7 +5,6 @@ from typing import Any
 
 from .registry import OPENCODE_MARSHAL_SEAT_IDS, STANDARD11_PROFILE
 
-
 DEFAULT_RUN_ROLE = "requalification"
 DEFAULT_RUN_GRADE = "formal"
 DEMO_RUN_ROLE = "demo"

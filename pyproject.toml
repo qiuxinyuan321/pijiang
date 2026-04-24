@@ -15,7 +15,11 @@ authors = [
 dependencies = ["rich>=13.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6.0",
+  "mypy>=1.11",
+]
 
 [project.scripts]
 cpj = "pijiang.cli.main:main"
@@ -34,3 +38,57 @@ include = ["pijiang*", "tools*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [
+  "dist",
+  "build",
+  "output",
+  ".pytest_cache",
+  "pijiang.egg-info",
+]
+
+[tool.ruff.lint]
+# Start conservative: catch real bugs, not style drift.
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes (unused imports, undefined names, etc.)
+  "W",    # pycodestyle warnings
+  "I",    # isort (import ordering)
+  "B",    # flake8-bugbear (common gotchas)
+  "UP",   # pyupgrade (modern syntax)
+  "RUF",  # ruff-specific rules
+]
+ignore = [
+  "E501",   # line-too-long — let formatter decide, Chinese strings often exceed
+  "B008",   # function calls in defaults (dataclass field(default_factory=...))
+  "UP007",  # X | Y union — intentional, already used
+  "RUF001", # ambiguous Chinese punctuation (中文标点本身就是特性)
+  "RUF002",
+  "RUF003",
+  "RUF005", # list-concat vs unpacking — subprocess cmd lists are clearer with +
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use sys.path.insert before imports (legitimate pattern for running
+# tests without installing the package), so E402 is expected there.
+"tests/*" = ["B011", "E402"]
+# Same sys.path.insert pattern in the legacy runner entrypoint probes.
+"tools/solution_factory/bailian_probe.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+# Pragmatic: the repo uses many dataclasses with Any payloads; don't require
+# strict annotation coverage for v0.x, but surface real type mismatches.
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true

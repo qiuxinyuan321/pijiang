@@ -5,18 +5,19 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
+from http.client import IncompleteRead, RemoteDisconnected
 from pathlib import Path
 from typing import Any
 
 from .endpoints import build_chat_endpoint
 from .types import ExecutionRequest, ExecutionResponse, ProviderCapabilities, ProviderProfile
-
 
 logger = logging.getLogger(__name__)
 
@@ -51,20 +52,72 @@ def profile_from_payload(payload: dict[str, Any]) -> ProviderProfile:
     return ProviderProfile(**data)
 
 
+_FENCED_CODE_RE = re.compile(
+    r"```(?:json|JSON|javascript|js|)?\s*\n(.*?)\n```",
+    re.DOTALL,
+)
+
+
 def _extract_json_block(text: str) -> dict[str, Any]:
+    """Pull a JSON object out of model output that may be wrapped in markdown.
+
+    Strategy, most-specific to least:
+    1. Try to parse the whole stripped text as JSON.
+    2. If the text contains fenced code blocks, try each block in order (the
+       last one usually wins for structured outputs, but we try all).
+    3. Fall back to the widest `{...}` slice and parse that.
+    The final fall-back raises `json.JSONDecodeError` so callers can handle.
+    """
     stripped = text.strip()
-    if stripped.startswith("```"):
-        lines = stripped.splitlines()
-        if len(lines) >= 3:
-            stripped = "\n".join(lines[1:-1]).strip()
+    if not stripped:
+        raise json.JSONDecodeError("empty content", stripped, 0)
+
+    # 1. Whole-text parse (fast path for pure JSON responses).
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
-        start = stripped.find("{")
-        end = stripped.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(stripped[start : end + 1])
-        raise
+        pass
+
+    # 2. Walk every fenced block; prefer the last parseable one since models
+    # often produce explanation text followed by the final JSON.
+    last_error: json.JSONDecodeError | None = None
+    fenced_candidates = [match.group(1).strip() for match in _FENCED_CODE_RE.finditer(stripped)]
+    for candidate in reversed(fenced_candidates):
+        if not candidate:
+            continue
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+
+    # 3. Widest `{...}` slice, then progressively shrink to find a valid JSON
+    # object if the outer slice contains trailing non-JSON text.
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start >= 0 and end > start:
+        slice_text = stripped[start : end + 1]
+        try:
+            return json.loads(slice_text)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            # Try trimming trailing text by scanning for matching braces.
+            depth = 0
+            for idx, ch in enumerate(slice_text):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            return json.loads(slice_text[: idx + 1])
+                        except json.JSONDecodeError as inner_exc:
+                            last_error = inner_exc
+                            break
+
+    if last_error is not None:
+        raise last_error
+    raise json.JSONDecodeError("no JSON object found", stripped, 0)
 
 
 def _message_content(payload: dict[str, Any]) -> str:
@@ -109,7 +162,8 @@ def _semver_key(value: str) -> tuple[int, int, int]:
     matched = _SEMVER_RE.search(value)
     if not matched:
         return (0, 0, 0)
-    return tuple(int(part) for part in matched.groups())
+    major, minor, patch = matched.groups()
+    return (int(major), int(minor), int(patch))
 
 
 def _resolve_opencode_command() -> list[str]:
@@ -130,6 +184,83 @@ def _resolve_opencode_command() -> list[str]:
         candidates.sort(key=lambda item: (_semver_key(item.parent.parent.name), item.stat().st_mtime), reverse=True)
         return [str(candidates[0])]
     raise ProviderExecutionError("unable to resolve an opencode executable")
+
+
+RETRIABLE_HTTP_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
+DEFAULT_HTTP_BACKOFF_SECONDS: tuple[float, ...] = (1.0, 3.0)
+TRANSIENT_HTTP_EXCEPTIONS = (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionResetError, IncompleteRead, RemoteDisconnected)
+
+
+def _parse_retry_after(raw: str | None) -> float | None:
+    """Parse a Retry-After header. Supports integer seconds only (HTTP-date is rare
+    for model APIs and not worth the complexity)."""
+    if not raw:
+        return None
+    text = raw.strip()
+    if not text:
+        return None
+    try:
+        seconds = float(text)
+    except ValueError:
+        return None
+    if seconds < 0:
+        return None
+    return min(seconds, 30.0)  # cap to keep a misbehaving server from hanging us
+
+
+def _http_post_with_retry(
+    http_request: urllib.request.Request,
+    *,
+    timeout_sec: int,
+    profile_id: str,
+    max_retries: int = 2,
+    backoff_seconds: tuple[float, ...] = DEFAULT_HTTP_BACKOFF_SECONDS,
+) -> str:
+    """POST with retries on transient failures (429/5xx/network) and respect for
+    Retry-After. Returns the decoded body on success; raises ProviderExecutionError
+    when retries are exhausted or the error is non-retriable."""
+    attempt = 0
+    while True:
+        try:
+            with urllib.request.urlopen(http_request, timeout=timeout_sec) as response:
+                body = response.read()
+                if not body:
+                    raise ProviderExecutionError(f"{profile_id} request returned empty response body")
+                return body.decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            code = getattr(exc, "code", 0)
+            if code not in RETRIABLE_HTTP_STATUSES or attempt >= max_retries:
+                raise ProviderExecutionError(
+                    f"{profile_id} request failed with HTTP {code}: {exc}"
+                ) from exc
+            retry_after = _parse_retry_after(
+                exc.headers.get("Retry-After") if getattr(exc, "headers", None) else None
+            )
+            delay = retry_after if retry_after is not None else backoff_seconds[min(attempt, len(backoff_seconds) - 1)]
+            logger.warning(
+                "%s returned HTTP %s, retrying in %.1fs (attempt %d/%d)",
+                profile_id,
+                code,
+                delay,
+                attempt + 1,
+                max_retries,
+            )
+            time.sleep(delay)
+            attempt += 1
+        except TRANSIENT_HTTP_EXCEPTIONS as exc:
+            if attempt >= max_retries:
+                raise ProviderExecutionError(f"{profile_id} transient network failure after retries: {exc}") from exc
+            delay = backoff_seconds[min(attempt, len(backoff_seconds) - 1)]
+            logger.warning(
+                "%s transient network error: %s, retrying in %.1fs (attempt %d/%d)",
+                profile_id,
+                exc,
+                delay,
+                attempt + 1,
+                max_retries,
+            )
+            time.sleep(delay)
+            attempt += 1
 
 
 @dataclass
@@ -161,12 +292,15 @@ class OpenAICompatibleAdapter(BaseProviderAdapter):
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         http_request = urllib.request.Request(url, data=raw, headers=headers, method="POST")
+        body = _http_post_with_retry(
+            http_request,
+            timeout_sec=request.timeout_sec,
+            profile_id=self.profile.id,
+        )
         try:
-            with urllib.request.urlopen(http_request, timeout=request.timeout_sec) as response:
-                body = response.read().decode("utf-8")
-        except urllib.error.URLError as exc:
-            raise ProviderExecutionError(f"{self.profile.id} request failed: {exc}") from exc
-        parsed = json.loads(body)
+            parsed = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise ProviderExecutionError(f"{self.profile.id} returned invalid JSON response") from exc
         content = _message_content(parsed)
         if request.schema is not None:
             content = json.dumps(_extract_json_block(content), ensure_ascii=False)
@@ -199,12 +333,15 @@ class OllamaAdapter(BaseProviderAdapter):
         raw = json.dumps(payload).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         http_request = urllib.request.Request(url, data=raw, headers=headers, method="POST")
+        body = _http_post_with_retry(
+            http_request,
+            timeout_sec=request.timeout_sec,
+            profile_id=self.profile.id,
+        )
         try:
-            with urllib.request.urlopen(http_request, timeout=request.timeout_sec) as response:
-                body = response.read().decode("utf-8")
-        except urllib.error.URLError as exc:
-            raise ProviderExecutionError(f"{self.profile.id} request failed: {exc}") from exc
-        parsed = json.loads(body)
+            parsed = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise ProviderExecutionError(f"{self.profile.id} returned invalid JSON response") from exc
         message = parsed.get("message", {})
         content = str(message.get("content", "")).strip()
         if request.schema is not None:

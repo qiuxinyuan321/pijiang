@@ -8,7 +8,7 @@
   <a href="https://github.com/qiuxinyuan321/pijiang/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/qiuxinyuan321/pijiang/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB">
-  <img alt="v0.3.0" src="https://img.shields.io/badge/version-0.3.0-blue">
+  <img alt="v0.4.0" src="https://img.shields.io/badge/version-0.4.0-blue">
   <img alt="Council" src="https://img.shields.io/badge/Council-11%20Seats-8B4A2C">
   <img alt="Demo first" src="https://img.shields.io/badge/Experience-demo--first-C97D42">
   <img alt="Obsidian recommended" src="https://img.shields.io/badge/Obsidian-Recommended-5A4B81">
@@ -104,10 +104,10 @@ brief → 10 路 variants → fusion → idea-map → debate×2 → fusion-decis
 | 场景 | 命令 |
 | --- | --- |
 | 从源码安装 | `pipx install .` 或 `uv tool install .` |
-| 从 wheel 安装 | `python -m build && pip install dist/pijiang-0.3.0-py3-none-any.whl` |
+| 从 wheel 安装 | `python -m build && pip install dist/pijiang-0.4.0-py3-none-any.whl` |
 | PyPI 直装（目标） | `pipx install pijiang` |
 
-> Python 3.11+ · 当前版本 `0.3.0` · 依赖 `rich>=13.0` · PyPI 是否已发布以 release 页面为准
+> Python 3.11+ · 当前版本 `0.4.0` · 依赖 `rich>=13.0` · PyPI 是否已发布以 release 页面为准
 
 ## 3 分钟上手
 
@@ -263,13 +263,29 @@ tools/            真实议会入口与本地 baseline runner
 | --- | --- |
 | `cpj --version` | 查看版本 |
 | `cpj init` | 初始化配置与模板 |
-| `cpj doctor` | 体检 readiness（Rich 彩色输出） |
+| `cpj doctor [--fix]` | 体检 readiness；`--fix` 把 env 已就绪的 HTTP provider 推进到 `configured` |
 | `cpj status` | 查看当前配置概览 |
 | `cpj demo` | 零 API 演示（实时进度表） |
 | `cpj integrate <host>` | 宿主集成 |
 | `cpj run` | 真实议会运行（实时进度表） |
+| `cpj runs [--limit N]` | 列最近 N 次 run + truth-audit 摘要 |
+| `cpj show <run-id>` | 查看单次 run 的详情与产物清单（run-id 支持唯一前缀匹配） |
+| `cpj config list-presets` | 列可用 provider preset（OpenAI / Ollama / 浮生云算 / OpenRouter 等） |
+| `cpj config add-provider <preset>` | 从 preset 快速追加一个 provider profile |
 
 > 所有命令支持 `--no-color` 禁用彩色输出（CI 场景），`--json` 输出机器可读格式。
+
+### 真实接入的最短路径（v0.4 新增）
+
+```powershell
+cpj init --yes
+cpj config add-provider openai         # 或 alibaba-coding-plan / ollama-local / openrouter / fushengyunsuan
+$env:OPENAI_API_KEY = "sk-..."
+cpj doctor --fix                       # env 就绪的 provider 自动推进为 configured
+cpj run --brief "..." --topic "..."
+cpj runs                               # 看一眼历史
+cpj show <run-id>                      # 看单次产物链
+```
 
 ## 文档入口
 

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich.prompt import Confirm
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.live import Live
+from rich.panel import Panel
+from rich.prompt import Confirm
+from rich.table import Table
 
 from pijiang import __version__
 from pijiang.factory.admission import DEMO_RUN_GRADE, DEMO_RUN_ROLE
@@ -30,10 +30,16 @@ from pijiang.factory.config import (
     unique_active_profile_count,
 )
 from pijiang.factory.council import CouncilEngine
-from pijiang.factory.registry import STANDARD11_PROFILE, STANDARD11_QUORUM_PROFILE
+from pijiang.factory.presets import get_preset, list_presets
 from pijiang.factory.readiness import build_readiness_report
+from pijiang.factory.registry import STANDARD11_PROFILE, STANDARD11_QUORUM_PROFILE
+from pijiang.factory.run_inspect import (
+    RunSummary,
+    find_run_by_id,
+    list_run_artifacts,
+    list_run_summaries,
+)
 from pijiang.obsidian import install_obsidian_template
-
 
 console = Console()
 err_console = Console(stderr=True)
@@ -45,7 +51,7 @@ def _config_path(value: str | None) -> Path:
     return default_config_path()
 
 
-def _print_json(payload: dict[str, object]) -> None:
+def _print_json(payload: dict[str, Any]) -> None:
     console.print_json(json.dumps(payload, ensure_ascii=False))
 
 
@@ -76,7 +82,7 @@ class _RichProgressTracker:
         if self._live:
             self._live.stop()
 
-    def callback(self, snapshot, event: dict[str, object]) -> None:
+    def callback(self, snapshot, event: dict[str, Any]) -> None:
         seat_id = str(event.get("seat_id", "")).strip()
         message = str(event.get("message", "")).strip()
         kind = str(event.get("kind", "")).strip()
@@ -138,7 +144,7 @@ class _RichProgressTracker:
         return table
 
 
-def _simple_progress_printer(snapshot, event: dict[str, object]) -> None:
+def _simple_progress_printer(snapshot, event: dict[str, Any]) -> None:
     """Fallback progress printer when Rich Live is not appropriate."""
     message = str(event.get("message", "")).strip()
     stage = str(event.get("stage", "")).strip()
@@ -170,7 +176,7 @@ def _status_style(status: str) -> str:
     return mapping.get(status, status)
 
 
-def _render_doctor_rich(payload: dict[str, object]) -> None:
+def _render_doctor_rich(payload: dict[str, Any]) -> None:
     """Render doctor output using Rich tables and panels."""
     # Header
     console.print()
@@ -258,7 +264,7 @@ def _render_doctor_rich(payload: dict[str, object]) -> None:
     ))
 
 
-def _render_doctor_plain(payload: dict[str, object]) -> str:
+def _render_doctor_plain(payload: dict[str, Any]) -> str:
     """Plain text doctor output for --json fallback and tests."""
     lines = [
         "皮匠部署体检",
@@ -318,7 +324,7 @@ def _render_doctor_plain(payload: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def _render_run_summary(summary: dict[str, object]) -> None:
+def _render_run_summary(summary: dict[str, Any]) -> None:
     """Render a beautiful post-run summary panel."""
     status = summary.get("status", "unknown")
     status_style = "green" if status == "completed" else "red"
@@ -448,7 +454,7 @@ def command_init(args: argparse.Namespace) -> int:
         return _print_error(str(exc))
 
 
-def _doctor_payload(config: PijiangConfig) -> dict[str, object]:
+def _doctor_payload(config: PijiangConfig) -> dict[str, Any]:
     topology = config.council_topology
     seats = active_seats(config)
     runnable_seats = active_seats(config, runnable_only=True)
@@ -496,17 +502,69 @@ def _doctor_payload(config: PijiangConfig) -> dict[str, object]:
     }
 
 
+def _auto_fix_configured_providers(config: PijiangConfig) -> list[tuple[str, str]]:
+    """Promote HTTP providers from ``needs_setup`` to ``configured`` when the
+    required API-key env var is already populated. Returns the list of
+    ``(profile_id, reason)`` tuples describing what was changed."""
+    changes: list[tuple[str, str]] = []
+    for profile in config.provider_profiles:
+        if not profile.enabled:
+            continue
+        if profile.config_status == "configured":
+            continue
+        if profile.adapter_type not in {"openai_compatible", "planning_api"}:
+            continue
+        if not profile.api_key_env:
+            continue
+        if os.environ.get(profile.api_key_env, "").strip():
+            profile.config_status = "configured"
+            changes.append((profile.id, f"env {profile.api_key_env} 已设置"))
+    return changes
+
+
 def command_doctor(args: argparse.Namespace) -> int:
     try:
         config_path = _config_path(args.config)
         if not config_path.exists():
             return _print_error(f"配置文件不存在: {config_path}")
         config = load_config(config_path)
+
+        fix_requested = bool(getattr(args, "fix", False))
+        applied_fixes: list[tuple[str, str]] = []
+        if fix_requested:
+            applied_fixes = _auto_fix_configured_providers(config)
+            if applied_fixes:
+                try:
+                    save_config(config, config_path)
+                except OSError as exc:
+                    return _print_error(f"写回配置失败: {exc}")
+
         payload = _doctor_payload(config)
+        if applied_fixes:
+            payload["auto_fixes_applied"] = [
+                {"profile_id": profile_id, "reason": reason}
+                for profile_id, reason in applied_fixes
+            ]
+
         if args.json:
             _print_json(payload)
         else:
             _render_doctor_rich(payload)
+            if fix_requested:
+                if applied_fixes:
+                    console.print()
+                    console.print("[bold green]自动修复结果:[/bold green]")
+                    for profile_id, reason in applied_fixes:
+                        console.print(
+                            f"  [green]✅[/green] profile [bold]{profile_id}[/bold]"
+                            f" → configured ({reason})"
+                        )
+                else:
+                    console.print()
+                    console.print(
+                        "[dim]--fix 未改动配置：没有满足自动推进条件的 provider"
+                        "（需 adapter_type=openai_compatible/planning_api 且 api_key_env 已设置）。[/dim]"
+                    )
         return 0 if payload["readiness_status"] == "ready" else 2
     except Exception as exc:
         return _print_error(str(exc))
@@ -551,6 +609,363 @@ def command_status(args: argparse.Namespace) -> int:
         else:
             console.print("\n[green]所有检查通过[/green]，可以运行 [bold]cpj demo[/bold] 或 [bold]cpj run[/bold]。")
 
+        return 0
+    except Exception as exc:
+        return _print_error(str(exc))
+
+
+def _audit_style(status: str) -> str:
+    mapping = {
+        "success": "[green]✅ success[/green]",
+        "degraded": "[yellow]⚠️  degraded[/yellow]",
+        "needs-review": "[yellow]⚠️  needs-review[/yellow]",
+        "failed": "[red]❌ failed[/red]",
+        "": "[dim]—[/dim]",
+    }
+    return mapping.get(status, f"[dim]{status}[/dim]")
+
+
+def _run_summary_to_dict(summary: RunSummary) -> dict[str, Any]:
+    return {
+        "run_id": summary.run_id,
+        "status": summary.status,
+        "stage": summary.stage,
+        "topic": summary.topic,
+        "brief_path": summary.brief_path,
+        "council_mode": summary.council_mode,
+        "started_at": summary.started_at,
+        "finished_at": summary.finished_at,
+        "seat_count": summary.seat_count,
+        "completed_seat_count": summary.completed_seat_count,
+        "failed_seat_count": summary.failed_seat_count,
+        "audit_status": summary.audit_status,
+        "reason_codes": summary.reason_codes,
+        "fake_success_flag_count": summary.fake_success_flag_count,
+        "regression_case_count": summary.regression_case_count,
+        "output_dir": summary.output_dir,
+        "run_dir": summary.run_dir,
+        "watcher_alert_count": summary.watcher_alert_count,
+        "watcher_action_count": summary.watcher_action_count,
+    }
+
+
+def command_runs(args: argparse.Namespace) -> int:
+    """List recent council runs with truth-audit summary."""
+    try:
+        config_path = _config_path(args.config)
+        if not config_path.exists():
+            return _print_error(f"配置文件不存在: {config_path}")
+        config = load_config(config_path)
+        cache_root = Path(config.cache_root).expanduser().resolve()
+        summaries = list_run_summaries(cache_root, limit=args.limit)
+
+        if args.json:
+            _print_json(
+                {
+                    "cache_root": str(cache_root),
+                    "run_count": len(summaries),
+                    "runs": [_run_summary_to_dict(item) for item in summaries],
+                }
+            )
+            return 0
+
+        if not summaries:
+            console.print(Panel(
+                f"[dim]尚无运行记录。先跑一次 [bold]cpj demo[/bold] 或 [bold]cpj run[/bold]。[/dim]\n\n"
+                f"缓存根目录：{cache_root}",
+                title="皮匠 runs",
+                border_style="yellow",
+            ))
+            return 0
+
+        table = Table(
+            title=f"[bold]最近 {len(summaries)} 次运行[/bold]",
+            border_style="cyan",
+            expand=True,
+        )
+        table.add_column("Run ID", style="bold")
+        table.add_column("开始时间")
+        table.add_column("议题", overflow="fold")
+        table.add_column("Status", justify="center")
+        table.add_column("席位", justify="right")
+        table.add_column("Audit", justify="center")
+        for summary in summaries:
+            seat_str = (
+                f"{summary.completed_seat_count}/{summary.seat_count}"
+                if summary.seat_count
+                else "[dim]—[/dim]"
+            )
+            if summary.failed_seat_count:
+                seat_str += f" [red]×{summary.failed_seat_count}[/red]"
+            status_icon = {
+                "completed": "[green]✅[/green]",
+                "success": "[green]✅[/green]",
+                "degraded": "[yellow]⚠️[/yellow]",
+                "needs-review": "[yellow]⚠️[/yellow]",
+                "failed": "[red]❌[/red]",
+                "running": "[cyan]⚡[/cyan]",
+            }.get(summary.status, f"[dim]{summary.status}[/dim]")
+            table.add_row(
+                summary.run_id,
+                summary.started_at or "[dim]—[/dim]",
+                summary.topic or "[dim]—[/dim]",
+                status_icon,
+                seat_str,
+                _audit_style(summary.audit_status),
+            )
+
+        console.print()
+        console.print(table)
+        console.print(
+            "\n[dim]查看单次详情：[bold]cpj show <run-id>[/bold]"
+            " （run_id 支持唯一前缀匹配）[/dim]"
+        )
+        return 0
+    except Exception as exc:
+        return _print_error(str(exc))
+
+
+def command_show(args: argparse.Namespace) -> int:
+    """Show a single run's manifest, status, audit and artifact list."""
+    try:
+        config_path = _config_path(args.config)
+        if not config_path.exists():
+            return _print_error(f"配置文件不存在: {config_path}")
+        config = load_config(config_path)
+        cache_root = Path(config.cache_root).expanduser().resolve()
+        summary = find_run_by_id(cache_root, args.run_id)
+        if summary is None:
+            return _print_error(
+                f"未找到 run: {args.run_id}。运行 [bold]cpj runs[/bold] 查看可用的 run_id。"
+            )
+        artifacts = list_run_artifacts(summary)
+
+        if args.json:
+            _print_json(
+                {
+                    "run": _run_summary_to_dict(summary),
+                    "artifacts": [
+                        {
+                            "label": artifact.label,
+                            "relative_path": artifact.relative_path,
+                            "absolute_path": artifact.absolute_path,
+                            "exists": artifact.exists,
+                            "size_bytes": artifact.size_bytes,
+                        }
+                        for artifact in artifacts
+                    ],
+                }
+            )
+            return 0
+
+        # Header
+        console.print()
+        console.print(Panel(
+            f"[bold]{summary.run_id}[/bold]  ·  {summary.topic or '[dim]未命名议题[/dim]'}",
+            border_style="cyan",
+        ))
+
+        # Overview table
+        overview = Table(show_header=False, border_style="dim", expand=True, padding=(0, 2))
+        overview.add_column("项目", style="bold")
+        overview.add_column("值")
+        overview.add_row("Status", summary.status)
+        overview.add_row("Stage", summary.stage or "[dim]—[/dim]")
+        overview.add_row("Council Mode", summary.council_mode or "[dim]—[/dim]")
+        overview.add_row("开始时间", summary.started_at or "[dim]—[/dim]")
+        overview.add_row("结束时间", summary.finished_at or "[dim]—[/dim]")
+        overview.add_row(
+            "席位",
+            f"完成 [green]{summary.completed_seat_count}[/green]"
+            f" / 失败 [red]{summary.failed_seat_count}[/red]"
+            f" / 总 {summary.seat_count}",
+        )
+        overview.add_row("Truth Audit", _audit_style(summary.audit_status))
+        if summary.reason_codes:
+            overview.add_row("Reason Codes", ", ".join(summary.reason_codes))
+        if summary.fake_success_flag_count:
+            overview.add_row(
+                "Fake Success Flags",
+                f"[red]{summary.fake_success_flag_count}[/red]",
+            )
+        if summary.regression_case_count:
+            overview.add_row("Regression Cases", str(summary.regression_case_count))
+        if summary.watcher_alert_count or summary.watcher_action_count:
+            overview.add_row(
+                "觉者",
+                f"alerts=[yellow]{summary.watcher_alert_count}[/yellow]"
+                f" / actions=[cyan]{summary.watcher_action_count}[/cyan]",
+            )
+        overview.add_row("Brief", summary.brief_path or "[dim]—[/dim]")
+        overview.add_row("Run Dir", summary.run_dir)
+        overview.add_row("Output Dir", summary.output_dir or "[dim]—[/dim]")
+        console.print(overview)
+
+        # Artifact list
+        artifact_table = Table(
+            title="产物清单",
+            border_style="dim",
+            expand=True,
+        )
+        artifact_table.add_column("标签", style="bold")
+        artifact_table.add_column("文件名")
+        artifact_table.add_column("状态", justify="center")
+        artifact_table.add_column("大小", justify="right")
+        for artifact in artifacts:
+            if artifact.exists:
+                state = "[green]✅[/green]"
+                size = f"{artifact.size_bytes:,} B"
+            else:
+                state = "[dim]—[/dim]"
+                size = "[dim]—[/dim]"
+            artifact_table.add_row(
+                artifact.label,
+                f"[dim]{artifact.relative_path}[/dim]",
+                state,
+                size,
+            )
+        console.print()
+        console.print(artifact_table)
+        return 0
+    except Exception as exc:
+        return _print_error(str(exc))
+
+
+def command_config_list_presets(args: argparse.Namespace) -> int:
+    """List available provider presets."""
+    try:
+        presets = list_presets()
+        if args.json:
+            _print_json(
+                {
+                    "preset_count": len(presets),
+                    "presets": [
+                        {
+                            "id": item.preset_id,
+                            "name": item.name,
+                            "description": item.description,
+                            "adapter_type": item.adapter_type,
+                            "default_model": item.default_model,
+                            "roles": list(item.roles) if item.roles else ["controller"],
+                            "api_key_env": item.api_key_env,
+                            "base_url": item.base_url,
+                            "quality_tier": item.quality_tier,
+                        }
+                        for item in presets
+                    ],
+                }
+            )
+            return 0
+
+        table = Table(title="[bold]可用 Provider Preset[/bold]", border_style="cyan", expand=True)
+        table.add_column("ID", style="bold")
+        table.add_column("名称")
+        table.add_column("Adapter")
+        table.add_column("Default Model")
+        table.add_column("API Key Env")
+        for item in presets:
+            table.add_row(
+                item.preset_id,
+                item.name,
+                item.adapter_type,
+                item.default_model,
+                item.api_key_env or "[dim]—[/dim]",
+            )
+        console.print()
+        console.print(table)
+        console.print(
+            "\n[dim]使用示例：[bold]cpj config add-provider openai[/bold]"
+            "，更多选项见 [bold]cpj config add-provider --help[/bold]。[/dim]"
+        )
+        return 0
+    except Exception as exc:
+        return _print_error(str(exc))
+
+
+def command_config_add_provider(args: argparse.Namespace) -> int:
+    """Add a provider profile from a preset to the config."""
+    try:
+        config_path = _config_path(args.config)
+        if not config_path.exists():
+            return _print_error(
+                f"配置文件不存在: {config_path}。先运行 [bold]cpj init[/bold] 初始化。"
+            )
+        config = load_config(config_path)
+
+        preset = get_preset(args.preset)
+        if preset is None:
+            available = ", ".join(sorted(item.preset_id for item in list_presets()))
+            return _print_error(
+                f"未知 preset: {args.preset}。可用选项: {available}"
+            )
+
+        profile_id = args.id or preset.preset_id
+        existing_ids = {profile.id for profile in config.provider_profiles}
+        if profile_id in existing_ids and not args.force:
+            return _print_error(
+                f"profile id {profile_id!r} 已存在。加 [bold]--force[/bold] 覆盖，或用 [bold]--id[/bold] 指定其他名字。"
+            )
+
+        profile = preset.build_profile(profile_id=profile_id, model=args.model)
+        if args.roles:
+            profile.roles = args.roles
+        if args.relay_url:
+            profile.relay_url = args.relay_url
+        if args.base_url:
+            profile.base_url = args.base_url
+
+        # Replace existing profile of the same id if --force, else append.
+        replaced = False
+        if args.force and profile_id in existing_ids:
+            config.provider_profiles = [
+                profile if existing.id == profile_id else existing
+                for existing in config.provider_profiles
+            ]
+            replaced = True
+        else:
+            config.provider_profiles.append(profile)
+
+        save_config(config, config_path)
+
+        if args.json:
+            _print_json(
+                {
+                    "status": "added",
+                    "replaced": replaced,
+                    "profile_id": profile.id,
+                    "preset_id": preset.preset_id,
+                    "adapter_type": profile.adapter_type,
+                    "model": profile.model,
+                    "roles": profile.roles,
+                    "api_key_env": profile.api_key_env,
+                    "config_path": str(config_path),
+                }
+            )
+            return 0
+
+        action = "已覆盖" if replaced else "已新增"
+        console.print()
+        console.print(Panel(
+            f"[bold green]{action} provider[/bold green]\n\n"
+            f"  Profile ID   {profile.id}\n"
+            f"  Preset       {preset.preset_id} · {preset.name}\n"
+            f"  Adapter      {profile.adapter_type}\n"
+            f"  Model        {profile.model}\n"
+            f"  Roles        {', '.join(profile.roles) or '—'}\n"
+            f"  API Key Env  {profile.api_key_env or '[dim](无需 key)[/dim]'}\n"
+            f"  Base URL     {profile.base_url or '[dim](需手工填写)[/dim]'}",
+            title="皮匠 config add-provider",
+            border_style="green",
+        ))
+        console.print()
+        console.print("[bold]下一步:[/bold]")
+        if profile.api_key_env:
+            console.print(f"  1. 设置环境变量 [cyan]${profile.api_key_env}[/cyan]")
+            console.print("  2. 运行 [bold]cpj doctor --fix[/bold] 自动推进为 configured")
+        else:
+            console.print("  1. 编辑配置文件确认 base_url / relay_url / command 等字段")
+            console.print("  2. 运行 [bold]cpj doctor[/bold] 验证")
+        console.print("  3. 运行 [bold]cpj run[/bold] 调用真实议会")
         return 0
     except Exception as exc:
         return _print_error(str(exc))
@@ -644,8 +1059,19 @@ def command_run(args: argparse.Namespace) -> int:
             if tracker:
                 tracker.stop()
 
-        config.onboarding.first_run_acknowledged = True
-        save_config(config, config_path)
+        # Only persist the first-run acknowledgement once. Avoids touching the
+        # config on every successful run (which can overwrite a read-only template
+        # or shared/CI-mounted config file).
+        if not config.onboarding.first_run_acknowledged:
+            config.onboarding.first_run_acknowledged = True
+            try:
+                save_config(config, config_path)
+            except OSError as exc:
+                # Not fatal — the run itself succeeded. Surface a warning so the
+                # user knows subsequent runs will show the intro again.
+                err_console.print(
+                    f"[yellow]⚠️[/yellow] 无法更新 onboarding 状态（{exc}），下次仍会显示首次运行说明。"
+                )
 
         if args.json:
             _print_json(summary)
@@ -778,6 +1204,11 @@ def build_parser() -> argparse.ArgumentParser:
     # doctor
     doctor_parser = subparsers.add_parser("doctor", help="检查当前配置、议会拓扑与可视化状态。")
     doctor_parser.add_argument("--config", help="配置文件路径。")
+    doctor_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="自动把 api_key_env 已设置的 HTTP provider 推进为 configured（保守模式，不改 endpoint）。",
+    )
     doctor_parser.add_argument("--json", action="store_true", help="输出机器可读的 readiness JSON。")
     doctor_parser.set_defaults(func=command_doctor)
 
@@ -785,6 +1216,56 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser = subparsers.add_parser("status", help="查看当前配置概览。")
     status_parser.add_argument("--config", help="配置文件路径。")
     status_parser.set_defaults(func=command_status)
+
+    # runs
+    runs_parser = subparsers.add_parser("runs", help="列出最近的议会运行。")
+    runs_parser.add_argument("--config", help="配置文件路径。")
+    runs_parser.add_argument("--limit", type=int, default=10, help="最多列出多少次 run（默认 10）。")
+    runs_parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
+    runs_parser.set_defaults(func=command_runs)
+
+    # show
+    show_parser = subparsers.add_parser("show", help="查看单次运行的详情与产物清单。")
+    show_parser.add_argument("run_id", help="run_id 或其唯一前缀。")
+    show_parser.add_argument("--config", help="配置文件路径。")
+    show_parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
+    show_parser.set_defaults(func=command_show)
+
+    # config
+    config_parser = subparsers.add_parser("config", help="编辑或查询 provider 配置。")
+    config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
+
+    # config list-presets
+    presets_parser = config_subparsers.add_parser(
+        "list-presets",
+        help="列出可用的 provider preset（OpenAI / Ollama / 中转等）。",
+    )
+    presets_parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
+    presets_parser.set_defaults(func=command_config_list_presets)
+
+    # config add-provider
+    add_parser = config_subparsers.add_parser(
+        "add-provider",
+        help="从 preset 快速追加一个 provider profile。",
+    )
+    add_parser.add_argument("preset", help="preset id，使用 cpj config list-presets 查看全部可选。")
+    add_parser.add_argument("--config", help="配置文件路径。")
+    add_parser.add_argument("--id", help="为新 profile 指定自定义 id（默认与 preset 同名）。")
+    add_parser.add_argument("--model", help="覆盖 preset 默认 model。")
+    add_parser.add_argument(
+        "--roles",
+        nargs="+",
+        help="覆盖 preset 默认 roles，例如 --roles controller planning。",
+    )
+    add_parser.add_argument("--relay-url", help="直接设置 relay_url 指向中转站。")
+    add_parser.add_argument("--base-url", help="覆盖 preset 默认 base_url。")
+    add_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="如果同 id 的 profile 已存在则覆盖。",
+    )
+    add_parser.add_argument("--json", action="store_true", help="输出机器可读 JSON。")
+    add_parser.set_defaults(func=command_config_add_provider)
 
     # demo
     demo_parser = subparsers.add_parser("demo", help="运行零 API 的示例议会，先验证安装与可视化。")

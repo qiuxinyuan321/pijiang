@@ -4,7 +4,6 @@ import os
 import re
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 UNC_PATH_RE = re.compile(r"^(\\\\|//)")

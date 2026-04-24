@@ -10,9 +10,11 @@
 
 官方黄金路径固定为：
 
-`install -> cpj init -> cpj doctor -> cpj demo -> 配置真实 providers -> cpj run`
+`install -> cpj init -> cpj doctor -> cpj demo -> cpj config add-provider -> cpj doctor --fix -> cpj run -> cpj runs / cpj show`
 
 不要跳步骤，尤其不要一上来就直接 `cpj run`。
+
+> **v0.4 新增**：配置真实 provider 不再需要手工编辑 `config.json`——`cpj config add-provider <preset>` 一行加，环境变量就绪后 `cpj doctor --fix` 一行自动推进到 configured。
 
 ## Step 1: 安装
 
@@ -89,6 +91,31 @@ demo 跑完后，至少去看：
 
 ## Step 5: 再接真实 provider
 
+### 最短路径（v0.4）
+
+先看有哪些内置 preset：
+
+```powershell
+cpj config list-presets
+```
+
+然后按 preset id 追加一个 provider——会自动写入 `config.json`，`config_status` 暂留在 `needs_setup`：
+
+```powershell
+cpj config add-provider openai                      # 或 alibaba-coding-plan / ollama-local / openrouter / fushengyunsuan
+```
+
+设好对应的环境变量（如 `OPENAI_API_KEY`）后，用 `--fix` 把 env 已就绪的 HTTP provider 批量推进为 `configured`：
+
+```powershell
+$env:OPENAI_API_KEY = "sk-..."
+cpj doctor --fix
+```
+
+`--fix` 是保守模式：不改 endpoint、不动 opencode 等非 env 依赖的 adapter、不会在 env 未设时乱改状态。
+
+### 进入 real run 的门禁条件
+
 当且仅当下面条件基本满足时，再进入真实 run：
 
 - `doctor` 没有 blocker
@@ -112,6 +139,15 @@ cpj run --brief "examples\\briefs\\project-parliament.md" --topic "首次真实�
 
 如果 `doctor` 仍有 blocker，`cpj run` 应拒绝执行，而不是把错误拖到 provider 调用阶段。
 
+## Step 7: 看一眼运行历史（v0.4）
+
+```powershell
+cpj runs                   # 最近 10 次 run + truth-audit 摘要
+cpj show <run-id>          # 单次 run 的 manifest / audit / 产物清单，run-id 支持唯一前缀匹配
+```
+
+`runs` 会同时扫 real run 和 demo run（`cache_root/runs/` + `cache_root/demo/runs/`），方便跟 demo 和真实运行比对。
+
 ## 失败时怎么处理
 
 如果第一次真实运行失败，不要直接猜。
@@ -119,6 +155,7 @@ cpj run --brief "examples\\briefs\\project-parliament.md" --topic "首次真实�
 优先收集这些信息：
 
 - `cpj doctor` 的输出
+- `cpj show <run-id>` 的摘要（产物清单直接告诉你 audit 落在什么状态）
 - 当前 run 目录下的 `status.json`
 - 当前 run 目录下的 `events.jsonl`
 - 对应 lane 的 stdout/stderr 或 partial artifact

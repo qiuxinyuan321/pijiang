@@ -15,7 +15,7 @@
 
 在 `Phase A+` 内，发布策略按“最小可验证基线”执行：
 
-- 优先确保 `install -> init -> doctor -> demo -> run` 能稳定走通
+- 优先确保 `install -> init -> doctor -> demo -> config add-provider -> doctor --fix -> run -> runs / show` 能稳定走通
 - 优先提供可验证的 wheel / sdist 构建产物
 - 在官方主路径尚未稳定前，不同时铺太多安装渠道
 
@@ -25,7 +25,8 @@
 
 - `0.x.y` 期间允许更快演进
 - 但任何会破坏默认路径、配置语义或公开命令面的改动，都必须写清楚
-- `cpj init / doctor / demo / run` 这组主命令面的破坏性变化必须进 release note
+- `cpj init / doctor / demo / run / runs / show / config` 这组主命令面的破坏性变化必须进 release note
+- [CHANGELOG.md](../CHANGELOG.md) 从 `v0.4` 起作为官方版本变动渡口
 
 ## 发布前门禁
 
@@ -40,12 +41,15 @@
 
 ```powershell
 pytest -q
+ruff check pijiang tools tests
+mypy pijiang
 python -m build
 python -m pip install .
 python -m pip install dist\*.whl
 cpj init --yes
 cpj doctor
 cpj demo
+cpj runs
 ```
 
 如果某个 release 连 demo-first 路径都不稳定，就不应放大发布。
@@ -93,6 +97,15 @@ cpj demo
 - 是否需要迁移配置文件
 - 是否有新的 readiness gate
 - 是否调整了 support matrix
+
+## v0.4 兼容性说明
+
+v0.4 的维护性重构不改变公开命令面，也不要求用户重新初始化配置：
+
+- `load_config` 会继续读取旧 `providers` / `topology` / `obsidian` payload；重新保存时统一写回当前结构。
+- `watcher-ledger.json` 只追加 `dedupe_key` / `merged_count` 等字段；既有 `entries`、`final_action`、`no_action_reason` 保持可读。
+- `70-run-truth-audit.json` 保留既有核心字段；fusion 审计语义收紧为“融合工件链完整性”，不再按普通 seat 规则判定。
+- Provider preset 扩展不改变默认配置，新增 preset 默认 `needs_setup`。
 
 ## 相关文档
 

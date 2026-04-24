@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 QUALITY_TIERS = {"weak", "standard", "strong", "elite"}
 ADAPTER_TYPES = {"openai_compatible", "ollama", "planning_api", "command_bridge", "opencode", "demo"}
 SEAT_TYPES = {"controller", "planning", "search", "marshal", "chaos", "skeptic", "fusion"}
@@ -176,6 +175,8 @@ class WatcherLedgerEntry:
     judgment: str
     source_signals: list[str] = field(default_factory=list)
     evidence: list[str] = field(default_factory=list)
+    dedupe_key: str = ""
+    merged_count: int = 1
     final_action: str = "pending"
     no_action_reason: str = ""
     user_proxy: bool = True

@@ -60,6 +60,8 @@ python -m tools.solution_factory run --brief <brief.md> --project-path <topic-pa
 ```powershell
 cpj doctor
 cpj run --brief <brief.md> --topic <topic> --watcher auto
+cpj runs                       # 最近 10 次 run + truth-audit 摘要（v0.4）
+cpj show <run-id>              # 单次 run 详情与 25 项标准产物清单（v0.4）
 ```
 
 ## 如何判断是不是跑偏了

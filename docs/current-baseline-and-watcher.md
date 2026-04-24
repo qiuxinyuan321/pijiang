@@ -55,6 +55,7 @@
 | P0a 后首条 formal rerun | `sf-20260321-165524-26436` |
 | rerun 状态 | `audit_status = degraded` |
 | 已定位原因 | truth audit 仍把 `fusion` seat 当普通 lane，误压成 `timeout_partial_only` |
+| v0.4 修复状态 | 已在审计实现中区分普通 seat / fusion / guardian；fusion 改按融合工件链审计 |
 | 当前 admitted baseline | `sf-20260321-200827-26632` |
 | admitted 状态 | `audit_status = success` + `baseline_admitted = true` |
 | guardian 精度信号 | `watcher_alert_count = 0` |
@@ -64,6 +65,7 @@
 - `standard11` 的 seat/profile 合同与 authority contract 都已经冻结并写进仓库
 - `sf-20260321-165524-26436` 的价值是暴露 `fusion` seat 审计误判，而不是被包装成失败叙事
 - `sf-20260321-200827-26632` 现在是 current canonical baseline 的最新 admitted 样本
+- v0.4 的代码层修复不改写历史 run 结论；它只保证后续 audit 不再把 fusion 当普通 lane 重复惩罚
 
 ## 你会拿到哪些产物
 
@@ -119,6 +121,7 @@
 - Baseline Admission Gate 已接通并真实裁决
 - `fusion` seat 与 `final-synthesis` phase 的边界已经进入真实审计链
 - `guardian ledger` 已接通，`alert -> no_action` 不再是纯噪音日志
+- v0.4 进一步把 guardian ledger 的重复 alert/action 合并为 `dedupe_key` + `merged_count`，减少 watcher 噪音
 
 ## 这轮没有宣称什么
 
@@ -137,6 +140,8 @@
 cpj doctor
 cpj run --watcher auto
 python -m tools.solution_factory run --brief <brief.md> --project-path <topic-path> --lanes standard11 --watcher auto
+cpj runs                   # v0.4：看最近一批 baseline 抽样
+cpj show <run-id>          # v0.4：看单条 baseline 的 audit 与产物清单
 ```
 
 这页不展开长教程；首次成功路径仍然看 [first-success-path.md](first-success-path.md)。

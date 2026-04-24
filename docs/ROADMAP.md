@@ -6,9 +6,9 @@
 
 ## 当前阶段
 
-当前仓库处于 `v0.x`，优先级是：
+当前仓库处于 `v0.4`，优先级是：
 
-- 让新用户能顺利完成 `init -> doctor -> demo -> run`
+- 让新用户能顺利完成 `init -> doctor -> demo -> config add-provider -> doctor --fix -> run -> runs / show`
 - 让开源首页、安装链路和 Obsidian 模板能快速展示价值
 - 让 provider 兼容面在不破坏旧配置的前提下持续扩展
 
@@ -19,12 +19,17 @@
 只有下面这些事项基本收敛后，才允许继续放大发布面、宿主面和能力抽象：
 
 - 官方祝福 profile 与单一 canonical config
-- `cpj doctor` 从播报器升级为修复导向入口
+- `cpj doctor` 从播报器升级为修复导向入口  ✅ **v0.4 已交付**：`doctor --fix` 保守式修复，env 就绪的 HTTP provider 自动推进为 `configured`
 - `cpj run` 前的 provider preflight
 - 可信 demo fixture、golden outputs、replay 或 trace
 - repo-facts pack 与 repo-grounded lint
 - Run Manifest、状态目录、结构化日志、partial artifact、support bundle
 - run 后 truth audit、regression cases、benchmark gate
+- truth audit 与 fusion/guardian 边界收敛  ✅ **v0.4 已交付**：fusion 按融合工件链审计，不再混入普通 seat 分母；guardian watcher 保持 sidecar
+- 运行历史检索闭环  ✅ **v0.4 已交付**：`cpj runs` / `cpj show` 读取纯函数层 `pijiang.factory.run_inspect`
+- Provider 接入最短路径  ✅ **v0.4 已交付**：`cpj config add-provider <preset>` + 保守内置 preset 目录，新增项默认 `needs_setup`
+- HTTP provider 轻量重试  ✅ **v0.4 已交付**：408/429/5xx、partial read、timeout 等瞬时错误重试 + `Retry-After` 解析
+- 真实议会入口代码复用  ✅ **v0.4 已交付**：`tools.solution_factory` 与 `pijiang.factory` 共用 prompt / preflight / opencode 解析支持层
 - 支持矩阵、smoke matrix、triage 边界
 - 单一路径发布基线
 
@@ -57,7 +62,7 @@
 - 强化 `cpj integrate <host>`
 - 深挖 Obsidian 单宿主闭环
 - 增强 Codex/OpenClaw/Claude Code/OpenCode 侧集成产物
-- 补强 Obsidian 面板与 run history
+- 补强 Obsidian 面板与 run history（与 v0.4 `cpj runs / cpj show` 打通）
 - 提升阶段进度、席位进度和产物增长的可见性
 - 增加更多真实 provider 冒烟验证
 

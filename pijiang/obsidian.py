@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 TEMPLATE_FILES: dict[str, str] = {
     "00-Start-Here.md": """# 皮匠 Obsidian 面板
 

@@ -6,14 +6,14 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime as _datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .runtime_support import utc_now_iso, write_json, write_text
 from .types import WatcherAction, WatcherAdvice, WatcherAlert, WatcherLedgerEntry, WatcherPolicy
-
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,24 @@ def _judgment_for_severity(severity: str) -> str:
     return "informational"
 
 
+def _stable_list(values: list[str] | None) -> list[str]:
+    result: list[str] = []
+    for value in values or []:
+        text = str(value).strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def _dedupe_key(*, trigger_code: str, stage: str, target_id: str) -> str:
+    raw = ":".join([trigger_code.strip(), stage.strip(), target_id.strip()])
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _normalized_artifact_label(label: str) -> str:
+    return label.strip().replace("\\", "/").lower()
+
+
 def _process_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -128,6 +146,8 @@ class WatcherRecorder:
         self.actions: list[dict[str, Any]] = []
         self.advices: list[dict[str, Any]] = []
         self.ledger_entries: list[dict[str, Any]] = []
+        self._alert_keys: set[str] = set()
+        self._action_keys: set[str] = set()
         self.state = {
             "watcher_enabled": bool(policy.enabled),
             "watcher_state": "idle",
@@ -200,11 +220,43 @@ class WatcherRecorder:
         evidence: list[str] | None = None,
     ) -> None:
         with self.lock:
-            digest = hashlib.sha1(f"{trigger_code}:{stage}:{target_id}:{observation}".encode("utf-8")).hexdigest()[:10]
+            dedupe_key = _dedupe_key(trigger_code=trigger_code, stage=stage, target_id=target_id)
+            digest = dedupe_key[:10]
             judgment = _judgment_for_severity(severity)
+            timestamp = utc_now_iso()
+            existing_entry: dict[str, Any] | None = None
+            for entry in self.ledger_entries:
+                if entry.get("dedupe_key") == dedupe_key:
+                    existing_entry = entry
+                    break
+            if existing_entry is not None:
+                existing_entry["timestamp"] = timestamp
+                existing_entry["severity"] = severity
+                existing_entry["judgment"] = judgment
+                existing_entry["source_signals"] = _stable_list(
+                    [*list(existing_entry.get("source_signals") or []), *list(source_signals or [])]
+                )
+                existing_entry["evidence"] = _stable_list(
+                    [*list(existing_entry.get("evidence") or []), *list(evidence or [])]
+                )
+                existing_entry["merged_count"] = int(existing_entry.get("merged_count", 1)) + 1
+                self.state["watcher_state"] = "alerting"
+                self.state["watcher_alert_count"] = len(self.alerts)
+                self.state["watcher_last_message"] = recommendation
+                self._emit_event(
+                    "watcher-alert-merged",
+                    trigger_code=trigger_code,
+                    stage=stage,
+                    target_id=target_id,
+                    severity=severity,
+                    message=observation,
+                    merged_count=existing_entry["merged_count"],
+                )
+                self._sync_files()
+                return
             alert = WatcherAlert(
                 alert_id=f"watcher-alert-{digest}",
-                timestamp=utc_now_iso(),
+                timestamp=timestamp,
                 trigger_code=trigger_code,
                 target_id=target_id,
                 stage=stage,
@@ -231,10 +283,12 @@ class WatcherRecorder:
                 stage=stage,
                 severity=severity,
                 judgment=judgment,
-                source_signals=list(source_signals or []),
-                evidence=list(evidence or []),
+                source_signals=_stable_list(source_signals),
+                evidence=_stable_list(evidence),
+                dedupe_key=dedupe_key,
             )
             self.alerts.append(asdict(alert))
+            self._alert_keys.add(dedupe_key)
             self.advices.append(asdict(advice))
             self.ledger_entries.append(asdict(ledger_entry))
             self.state["watcher_state"] = "alerting"
@@ -256,7 +310,9 @@ class WatcherRecorder:
         recommendation: str = "",
     ) -> None:
         with self.lock:
-            digest = hashlib.sha1(f"{trigger_code}:{stage}:{target_id}:{executed_action}:{result}".encode("utf-8")).hexdigest()[:10]
+            dedupe_key = _dedupe_key(trigger_code=trigger_code, stage=stage, target_id=target_id)
+            action_key = f"{dedupe_key}:{executed_action}:{result}"
+            digest = hashlib.sha1(action_key.encode()).hexdigest()[:10]
             action = WatcherAction(
                 action_id=f"watcher-action-{digest}",
                 timestamp=utc_now_iso(),
@@ -268,9 +324,13 @@ class WatcherRecorder:
                 observation=observation,
                 recommendation=recommendation,
             )
-            self.actions.append(asdict(action))
+            if action_key not in self._action_keys:
+                self.actions.append(asdict(action))
+                self._action_keys.add(action_key)
             for entry in reversed(self.ledger_entries):
-                if entry.get("trigger_code") == trigger_code and entry.get("stage") == stage and entry.get("target_id") == target_id:
+                if entry.get("dedupe_key") == dedupe_key or (
+                    entry.get("trigger_code") == trigger_code and entry.get("stage") == stage and entry.get("target_id") == target_id
+                ):
                     entry["final_action"] = f"{executed_action}:{result}"
                     if recommendation and not entry.get("no_action_reason"):
                         entry["no_action_reason"] = recommendation
@@ -288,25 +348,29 @@ class WatcherRecorder:
             if expected_artifacts:
                 for label, path in expected_artifacts.items():
                     if not path.exists() or not path.read_text(encoding="utf-8", errors="ignore").strip():
-                        missing.append(label)
+                        missing.append(_normalized_artifact_label(label))
+                missing = sorted(set(missing))
                 if missing:
                     self._emit_event("watcher-escalation", trigger_code="missing_expected_artifact", stage="finalize", target_id="", message=",".join(missing))
-                    digest = hashlib.sha1(f"missing_expected_artifact:finalize:{','.join(missing)}".encode("utf-8")).hexdigest()[:10]
+                    dedupe_key = _dedupe_key(trigger_code="missing_expected_artifact", stage="finalize", target_id="|".join(missing))
+                    digest = dedupe_key[:10]
                     timestamp = utc_now_iso()
-                    self.alerts.append(
-                        asdict(
-                            WatcherAlert(
-                                alert_id=f"watcher-alert-{digest}",
-                                timestamp=timestamp,
-                                trigger_code="missing_expected_artifact",
-                                target_id="",
-                                stage="finalize",
-                                severity="warning",
-                                observation=f"缺少核心工件：{', '.join(missing)}",
-                                recommendation="请优先补齐缺失工件，再把本轮 guardian 判断用于后续发布或基线说明。",
+                    if dedupe_key not in self._alert_keys:
+                        self.alerts.append(
+                            asdict(
+                                WatcherAlert(
+                                    alert_id=f"watcher-alert-{digest}",
+                                    timestamp=timestamp,
+                                    trigger_code="missing_expected_artifact",
+                                    target_id="",
+                                    stage="finalize",
+                                    severity="warning",
+                                    observation=f"缺少核心工件：{', '.join(missing)}",
+                                    recommendation="请优先补齐缺失工件，再把本轮 guardian 判断用于后续发布或基线说明。",
+                                )
                             )
                         )
-                    )
+                        self._alert_keys.add(dedupe_key)
                     self.advices.append(
                         asdict(
                             WatcherAdvice(
@@ -322,23 +386,31 @@ class WatcherRecorder:
                             )
                         )
                     )
-                    self.ledger_entries.append(
-                        asdict(
-                            WatcherLedgerEntry(
-                                entry_id=f"watcher-ledger-{digest}",
-                                timestamp=timestamp,
-                                trigger_code="missing_expected_artifact",
-                                target_id="",
-                                stage="finalize",
-                                severity="warning",
-                                judgment="suspect",
-                                source_signals=["artifact_presence"],
-                                evidence=[f"missing:{item}" for item in missing],
-                                final_action="no_action",
-                                no_action_reason="missing_expected_artifact",
+                    existing_entry = next((entry for entry in self.ledger_entries if entry.get("dedupe_key") == dedupe_key), None)
+                    if existing_entry is None:
+                        self.ledger_entries.append(
+                            asdict(
+                                WatcherLedgerEntry(
+                                    entry_id=f"watcher-ledger-{digest}",
+                                    timestamp=timestamp,
+                                    trigger_code="missing_expected_artifact",
+                                    target_id="",
+                                    stage="finalize",
+                                    severity="warning",
+                                    judgment="suspect",
+                                    source_signals=["artifact_presence"],
+                                    evidence=[f"missing:{item}" for item in missing],
+                                    dedupe_key=dedupe_key,
+                                    final_action="no_action",
+                                    no_action_reason="missing_expected_artifact",
+                                )
                             )
                         )
-                    )
+                    else:
+                        existing_entry["merged_count"] = int(existing_entry.get("merged_count", 1)) + 1
+                        existing_entry["evidence"] = _stable_list(
+                            [*list(existing_entry.get("evidence") or []), *[f"missing:{item}" for item in missing]]
+                        )
                     self.state["watcher_alert_count"] = len(self.alerts)
             for entry in self.ledger_entries:
                 if entry.get("final_action") == "pending":
@@ -372,6 +444,8 @@ class WatcherRecorder:
                         lines.append(f"  signals：{', '.join(item['source_signals'])}")
                     if item.get("evidence"):
                         lines.append(f"  evidence：{'; '.join(item['evidence'])}")
+                    if int(item.get("merged_count", 1)) > 1:
+                        lines.append(f"  merged_count：{item['merged_count']}")
                     if item.get("no_action_reason"):
                         lines.append(f"  no_action_reason：{item['no_action_reason']}")
                 lines.append("")
@@ -382,8 +456,8 @@ class WatcherRecorder:
                 lines.append("")
             if missing:
                 lines.append("## 仍需关注")
-                for item in missing:
-                    lines.append(f"- 缺少核心工件：`{item}`")
+                for missing_label in missing:
+                    lines.append(f"- 缺少核心工件：`{missing_label}`")
                 lines.append("")
             write_text(self.markdown_path, "\n".join(lines).rstrip() + "\n")
             self.state["watcher_state"] = "completed"

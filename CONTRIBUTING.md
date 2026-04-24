@@ -21,7 +21,10 @@
 1. `cpj init`
 2. `cpj doctor`
 3. `cpj demo`
-4. 再进入真实 provider 配置和 `cpj run`
+4. `cpj config add-provider <preset>`（v0.4）
+5. 设 env 变量 + `cpj doctor --fix`（v0.4）
+6. `cpj run`
+7. `cpj runs` / `cpj show <run-id>` 回看产物链（v0.4）
 
 ## 本地开发
 
@@ -42,6 +45,8 @@ python -m pip install -e .[dev]
 
 ```powershell
 pytest -q
+ruff check pijiang tools tests
+mypy pijiang
 python -m build
 python -m pijiang --help
 ```
@@ -50,6 +55,8 @@ python -m pijiang --help
 
 ```powershell
 cpj --help
+cpj doctor --help
+cpj config add-provider --help
 ```
 
 ## 适合贡献的方向
